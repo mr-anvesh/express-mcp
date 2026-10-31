@@ -643,7 +643,7 @@ ISC - See [LICENSE](./LICENSE) file for details.
 
 ## Author
 
-d0minator (Anvesh) - mr.anveshmishra@gmail.com
+d0minator
 
 ## Repository
 
@@ -651,4 +651,4 @@ https://github.com/mr-anvesh/express-mcp
 
 ---
 
-**Made with ❤️ for the Express and MCP communities**
+**Made with ❤️ by d0minator**
