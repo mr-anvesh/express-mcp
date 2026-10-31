@@ -16,10 +16,37 @@ A TypeScript library that automatically generates MCP (Model Context Protocol) s
 - 🪆 **Nested Router Support**: Handles sub-routers mounted with `app.use()`
 - 📦 **Zero Runtime Dependencies**: Generated files are self-contained with embedded MCP protocol implementation
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Using in Your Projects](#using-in-your-projects)
+- [API Reference](#api-reference)
+- [How It Works](#how-it-works)
+- [Integration Patterns](#integration-patterns)
+- [Real-World Examples](#real-world-examples)
+- [Best Practices](#best-practices)
+- [Tips & Tricks](#tips--tricks)
+- [Troubleshooting](#troubleshooting)
+- [Documentation](#documentation)
+- [Examples](#examples)
+- [Requirements](#requirements)
+
 ## Installation
 
 ```bash
 npm install express-mcp-server
+```
+
+Or add it to your `package.json`:
+
+```json
+{
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-mcp-server": "^1.0.1"
+  }
+}
 ```
 
 ## Quick Start
@@ -62,21 +89,155 @@ await generateMcpServer(app, {
 });
 ```
 
-### 3. Use the generated MCP server
-
-First, start your Express server:
+### 3. Run both servers
 
 ```bash
-node app.js
-```
+# Terminal 1: Start your Express server
+node server.js
 
-Then run the generated MCP server:
-
-```bash
-node mcp-server.ts
+# Terminal 2: Run the MCP server
+node mcp-server.js
 ```
 
 The MCP server will connect to your Express server and expose all endpoints as tools that can be called via the Model Context Protocol.
+
+## Using in Your Projects
+
+### Integration Workflow
+
+**Step 1: Create a generation script**
+
+Create `scripts/generate-mcp.ts` in your project:
+
+```typescript
+import { generateMcpServer } from 'express-mcp-server';
+import app from '../src/app.js';
+
+async function main() {
+  await generateMcpServer(app, {
+    expressBaseUrl: process.env.API_URL || 'http://localhost:3000',
+    outputPath: './mcp-server.ts',
+    typescript: true,
+    transport: 'stdio'
+  });
+  
+  console.log('✅ MCP server generated!');
+}
+
+main();
+```
+
+**Step 2: Add to package.json**
+
+```json
+{
+  "scripts": {
+    "generate:mcp": "tsx scripts/generate-mcp.ts",
+    "dev:all": "concurrently \"npm run dev\" \"npm run mcp\"",
+    "mcp": "node mcp-server.js"
+  }
+}
+```
+
+**Step 3: Generate and run**
+
+```bash
+# Generate MCP server
+npm run generate:mcp
+
+# Run both servers together
+npm run dev:all
+```
+
+### Common Use Cases
+
+#### 1. Existing REST API
+
+```typescript
+// Your existing app.ts
+const app = express();
+
+app.get('/api/orders', getOrders);
+app.post('/api/orders', createOrder);
+app.get('/api/customers/:id', getCustomer);
+
+export default app;
+```
+
+Generate MCP server:
+
+```typescript
+import { generateMcpServer } from 'express-mcp-server';
+
+await generateMcpServer(app, {
+  expressBaseUrl: 'http://localhost:3000',
+  outputPath: './mcp-server.ts'
+});
+```
+
+**Result**: 3 MCP tools (`get_api_orders`, `post_api_orders`, `get_api_customers_by_id`)
+
+#### 2. Environment-Specific Configuration
+
+```typescript
+const config = {
+  development: {
+    expressBaseUrl: 'http://localhost:3000',
+    outputPath: './dev/mcp-server.ts',
+    transport: 'stdio'
+  },
+  production: {
+    expressBaseUrl: 'https://api.myapp.com',
+    outputPath: './dist/mcp-server.js',
+    typescript: false,
+    transport: 'sse',
+    mcpPort: 3001
+  }
+};
+
+const env = process.env.NODE_ENV || 'development';
+await generateMcpServer(app, config[env]);
+```
+
+#### 3. With Authentication
+
+After generation, edit `mcp-server.ts` to add authentication:
+
+```typescript
+async function callTool(name: string, args: any): Promise<any> {
+  const baseUrl = 'http://localhost:3000';
+  
+  const headers = {
+    'Authorization': `Bearer ${process.env.API_TOKEN}`,
+    'Content-Type': 'application/json'
+  };
+  
+  switch (name) {
+    case 'get_users': {
+      const response = await fetch(`${baseUrl}/users`, { headers });
+      return await response.json();
+    }
+    // ... rest of handlers
+  }
+}
+```
+
+### Development Workflow
+
+**Initial setup:**
+```bash
+npm install express-mcp-server
+npm run generate:mcp
+npm run dev:all
+```
+
+**When you add/modify routes:**
+```bash
+# 1. Update your Express routes
+# 2. Regenerate MCP server
+npm run generate:mcp
+# 3. Restart MCP server (or use nodemon)
+```
 
 ## API Reference
 
@@ -87,11 +248,11 @@ Generates an MCP server file from an Express application.
 #### Parameters
 
 - `app: Application` - Express application instance
-- `options: GenerateOptions` - Configuration options:
-  - `expressBaseUrl: string` - Base URL of your Express server (e.g., `'http://localhost:3000'`)
-  - `outputPath: string` - Where to write the generated MCP server file
+- `options: GenerateOptions`:
+  - `expressBaseUrl: string` - Base URL of your Express server (required)
+  - `outputPath: string` - Where to write the generated MCP server file (required)
   - `typescript?: boolean` - Generate TypeScript (`.ts`) or JavaScript (`.js`). Default: `true`
-  - `transport?: 'stdio' | 'sse'` - Transport type for MCP server. Default: `'stdio'`
+  - `transport?: 'stdio' | 'sse'` - Transport type. Default: `'stdio'`
   - `mcpPort?: number` - Port for MCP server when using SSE transport
 
 #### Example
@@ -150,13 +311,252 @@ The generated MCP server file contains:
 3. **Tool Handlers**: Functions that make HTTP requests to your Express server
 4. **Server Bootstrap**: Initialization code to start the MCP server
 
+## Integration Patterns
+
+### Pattern 1: Monorepo
+
+```
+my-monorepo/
+├── packages/
+│   ├── api/                 # Express API
+│   │   ├── src/
+│   │   └── package.json
+│   └── mcp/                 # Generated MCP server
+│       ├── mcp-server.ts
+│       └── package.json
+└── scripts/
+    └── generate-mcp.ts      # Shared generator
+```
+
+### Pattern 2: Same Repo, Different Entry Points
+
+```
+my-project/
+├── src/
+│   ├── app.ts              # Express app
+│   ├── server.ts           # Express entry point
+│   └── routes/
+├── mcp-server.ts           # Generated MCP server
+├── package.json
+└── scripts/
+    └── generate-mcp.ts
+```
+
+### Pattern 3: Microservices
+
+```typescript
+// Each service generates its own MCP server
+await generateMcpServer(userService, {
+  expressBaseUrl: 'http://users-service:3000',
+  outputPath: './mcp-users-server.ts'
+});
+
+await generateMcpServer(orderService, {
+  expressBaseUrl: 'http://orders-service:3001',
+  outputPath: './mcp-orders-server.ts'
+});
+```
+
+## Real-World Examples
+
+### E-commerce API
+
+```typescript
+// src/app.ts
+const app = express();
+
+// Products
+app.get('/api/products', listProducts);
+app.get('/api/products/:id', getProduct);
+app.post('/api/products', createProduct);
+
+// Orders
+app.get('/api/orders', listOrders);
+app.post('/api/orders', createOrder);
+
+// Cart
+app.get('/api/cart', getCart);
+app.post('/api/cart/items', addToCart);
+
+export default app;
+```
+
+Generate:
+```typescript
+await generateMcpServer(app, {
+  expressBaseUrl: 'http://localhost:3000',
+  outputPath: './mcp-ecommerce-server.ts'
+});
+```
+
+**Result**: 9 MCP tools for managing products, orders, and cart via AI!
+
+### Multi-tenant SaaS
+
+```typescript
+const tenants = ['acme', 'globex', 'initech'];
+
+for (const tenant of tenants) {
+  await generateMcpServer(app, {
+    expressBaseUrl: `https://${tenant}.myapp.com`,
+    outputPath: `./mcp-${tenant}-server.ts`
+  });
+}
+```
+
+### Internal Admin Tools
+
+```typescript
+import adminRouter from '../src/routes/admin.js';
+
+const app = express();
+app.use('/admin', adminRouter);
+
+await generateMcpServer(app, {
+  expressBaseUrl: 'http://localhost:3000',
+  outputPath: './mcp-admin-server.ts',
+  transport: 'stdio' // For Claude Desktop
+});
+```
+
+## Best Practices
+
+1. **Version Control**: Commit the generated `mcp-server.ts` to track changes over time
+2. **Regenerate After Route Changes**: Add generation to your CI/CD pipeline
+3. **Environment Variables**: Use different base URLs for dev/staging/prod
+4. **Customize After Generation**: Edit tool descriptions and schemas for better AI understanding
+5. **Documentation**: Keep the generated file alongside your API documentation
+6. **Testing**: Test the generated MCP server with real AI clients before deploying
+7. **Security**: Add authentication/authorization to the generated server for production use
+
+## Tips & Tricks
+
+### For Claude Desktop Integration
+
+Use stdio transport:
+```typescript
+await generateMcpServer(app, {
+  expressBaseUrl: 'http://localhost:3000',
+  outputPath: './mcp-server.ts',
+  transport: 'stdio'
+});
+```
+
+Add to Claude Desktop config:
+```json
+{
+  "mcpServers": {
+    "my-api": {
+      "command": "node",
+      "args": ["/path/to/mcp-server.js"]
+    }
+  }
+}
+```
+
+### For Web Applications
+
+Use SSE transport with a port:
+```typescript
+await generateMcpServer(app, {
+  expressBaseUrl: 'http://localhost:3000',
+  outputPath: './mcp-server.ts',
+  transport: 'sse',
+  mcpPort: 3001
+});
+```
+
+Connect from browser:
+```javascript
+fetch('http://localhost:3001/message', {
+  method: 'POST',
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'tools/list',
+    id: 1
+  })
+});
+```
+
+### For Testing
+
+Generate test MCP server pointing to test environment:
+```typescript
+await generateMcpServer(app, {
+  expressBaseUrl: 'http://localhost:3001', // Test server
+  outputPath: './mcp-server-test.ts'
+});
+```
+
+### For CI/CD
+
+```yaml
+# .github/workflows/build.yml
+- name: Generate MCP Server
+  run: npm run generate:mcp
+
+- name: Commit generated files
+  run: |
+    git add mcp-server.ts
+    git commit -m "Update MCP server" || true
+```
+
+## Troubleshooting
+
+### Routes Not Appearing?
+
+Make sure routes are defined **before** calling `generateMcpServer()`:
+
+```typescript
+// ✅ Correct
+app.get('/users', handler);
+await generateMcpServer(app, options);
+
+// ❌ Wrong
+await generateMcpServer(app, options);
+app.get('/users', handler); // Too late!
+```
+
+### MCP Server Can't Reach Express?
+
+Check that:
+1. Express server is running: `curl http://localhost:3000`
+2. Base URL matches: `expressBaseUrl: 'http://localhost:3000'`
+3. Firewall allows connections
+
+### ES Module Errors?
+
+Ensure `package.json` has:
+```json
+{
+  "type": "module"
+}
+```
+
+For more troubleshooting, see the [Troubleshooting Guide](./docs/troubleshooting.md).
+
+## Documentation
+
+- 📖 [Complete Documentation](./docs/README.md) - Full documentation index
+- 🚀 [Quick Start Guide](./docs/quick-start.md) - Get up and running in 5 minutes
+- 📚 [API Reference](./docs/api-reference.md) - Complete API documentation
+- ⚙️ [Configuration Guide](./docs/configuration.md) - All configuration options
+- 🔧 [Tool Schema Reference](./docs/tool-schema.md) - How routes become tools
+- 🎓 [Basic Concepts](./docs/concepts.md) - Understanding the architecture
+- 💡 [FAQ](./docs/faq.md) - Frequently asked questions
+- 🔍 [MCP Protocol](./docs/mcp-protocol.md) - Understanding the protocol
+
 ## Examples
 
-See the [examples/simple-api](examples/simple-api) directory for a complete working example.
+See the [examples/simple-api](examples/simple-api) directory for a complete working example with:
+- Express app with multiple routes
+- Nested routers
+- Generation script
+- Generated MCP server
 
 ## Generated MCP Server Usage
 
-The generated MCP server can be used with any MCP client (like Claude Desktop). It supports:
+The generated MCP server supports standard MCP JSON-RPC methods:
 
 ### JSON-RPC Methods
 
@@ -164,7 +564,7 @@ The generated MCP server can be used with any MCP client (like Claude Desktop). 
 - `tools/list` - List all available tools
 - `tools/call` - Execute a tool (make HTTP request to Express endpoint)
 
-### Example JSON-RPC Messages
+### Example Messages
 
 **Initialize:**
 ```json
@@ -193,31 +593,62 @@ The generated MCP server can be used with any MCP client (like Claude Desktop). 
 
 The generated MCP server file is fully editable. You can:
 
-- Modify tool names and descriptions
-- Adjust input schemas (add validation, change types)
-- Add custom error handling
-- Modify the HTTP request logic
-- Add authentication headers
-- Transform request/response data
+- ✏️ Modify tool names and descriptions
+- 🔒 Add authentication headers
+- ✅ Adjust input schemas (add validation, change types)
+- ⚠️ Add custom error handling
+- 🔄 Transform request/response data
+- 🎨 Modify the HTTP request logic
 
 ## Requirements
 
-- Node.js >= 18
-- TypeScript >= 5.0 (for TypeScript projects)
-- Express.js >= 4.0
+- **Node.js** >= 18.0.0
+- **TypeScript** >= 5.0.0 (for TypeScript projects)
+- **Express.js** >= 4.0.0
 
-## License
+## Complete Package.json Example
 
-ISC
+```json
+{
+  "name": "my-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "generate:mcp": "tsx scripts/generate-mcp.ts",
+    "mcp": "node mcp-server.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run mcp\"",
+    "postbuild": "npm run generate:mcp"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "express-mcp-server": "^1.0.1",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0",
+    "concurrently": "^8.2.2"
+  }
+}
+```
 
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
+## License
+
+ISC - See [LICENSE](./LICENSE) file for details.
+
 ## Author
 
-d0minator (Anvesh)
+d0minator (Anvesh) - mr.anveshmishra@gmail.com
 
 ## Repository
 
 https://github.com/mr-anvesh/express-mcp
+
+---
+
+**Made with ❤️ for the Express and MCP communities**
