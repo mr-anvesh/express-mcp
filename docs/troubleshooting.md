@@ -61,21 +61,21 @@ Error: No routes found in Express application
 
 1. **Routes defined after generation**
    ```typescript
-   // ❌ Wrong: generate before defining routes
+   // Wrong: generate before defining routes
    await generateMcpServer(app, options);
    app.get('/users', ...);  // Too late!
    
-   // ✅ Correct: define routes first
+   // Correct: define routes first
    app.get('/users', ...);
    await generateMcpServer(app, options);
    ```
 
 2. **App not properly exported**
    ```typescript
-   // ❌ Wrong: local variable
+   // Wrong: local variable
    const app = express();
    
-   // ✅ Correct: exported for use
+   // Correct: exported for use
    const app = express();
    export default app;
    ```
@@ -84,9 +84,9 @@ Error: No routes found in Express application
    ```typescript
    const router = express.Router();
    router.get('/users', ...);
-   // ❌ Router defined but not mounted
+   // Router defined but not mounted
    
-   app.use('/api', router);  // ✅ Must mount it
+   app.use('/api', router);  // Must mount it
    ```
 
 ### Router Stack Access Errors
@@ -283,10 +283,10 @@ echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | node mcp-server.js
 
 2. **Check tool name spelling:**
 ```json
-// ❌ Wrong
+// Wrong
 {"name": "getUsers"}
 
-// ✅ Correct
+// Correct
 {"name": "get_users"}
 ```
 
@@ -332,7 +332,7 @@ Tool calls return 404 errors.
 expressBaseUrl: 'http://localhost:3000'
 
 // But Express is on different port
-app.listen(4000)  // ❌ Mismatch!
+app.listen(4000)  // Mismatch!
 ```
 
 2. **Route path changed**
@@ -343,8 +343,8 @@ app.get('/users/:id', ...)
 // Changed to:
 app.get('/api/users/:id', ...)
 
-// ❌ Generated server still uses /users/:id
-// ✅ Regenerate after route changes
+// Generated server still uses /users/:id
+// Regenerate after route changes
 ```
 
 3. **Nested router not extracting correctly**

@@ -15,7 +15,7 @@ async function main() {
       transport: 'stdio',
     });
 
-    console.log('\n✓ MCP server generated successfully!');
+    console.log('\nMCP server generated successfully!');
     console.log('\nTo use the MCP server:');
     console.log('1. Start your Express server: node examples/simple-api/server.js');
     console.log('2. Run the MCP server: node examples/simple-api/mcp-server.ts');

@@ -32,11 +32,11 @@ Configuration object with the following properties:
 
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
-| `expressBaseUrl` | `string` | ✅ Yes | - | Base URL where your Express server runs |
-| `outputPath` | `string` | ✅ Yes | - | Path where the MCP server file will be written |
-| `typescript` | `boolean` | ❌ No | `true` | Generate TypeScript (`.ts`) or JavaScript (`.js`) |
-| `transport` | `'stdio' \| 'sse'` | ❌ No | `'stdio'` | Transport protocol for the MCP server |
-| `mcpPort` | `number` | ❌ No | `undefined` | Port for SSE transport (required if `transport: 'sse'`) |
+| `expressBaseUrl` | `string` | Yes | - | Base URL where your Express server runs |
+| `outputPath` | `string` | Yes | - | Path where the MCP server file will be written |
+| `typescript` | `boolean` | No | `true` | Generate TypeScript (`.ts`) or JavaScript (`.js`) |
+| `transport` | `'stdio' \| 'sse'` | No | `'stdio'` | Transport protocol for the MCP server |
+| `mcpPort` | `number` | No | `undefined` | Port for SSE transport (required if `transport: 'sse'`) |
 
 #### Returns
 

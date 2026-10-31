@@ -9,12 +9,12 @@ A TypeScript library that automatically generates MCP (Model Context Protocol) s
 
 ## Features
 
-- 🔄 **Automatic Route Extraction**: Walks through your Express router stack to find all registered routes
-- 🎯 **Smart Tool Generation**: Converts HTTP endpoints to MCP tools with proper schemas
-- 📝 **Customizable Output**: Generates standalone TypeScript/JavaScript files you can edit
-- 🔌 **Multiple Transports**: Supports both stdio and SSE (Server-Sent Events) transports
-- 🪆 **Nested Router Support**: Handles sub-routers mounted with `app.use()`
-- 📦 **Zero Runtime Dependencies**: Generated files are self-contained with embedded MCP protocol implementation
+- **Automatic Route Extraction**: Walks through your Express router stack to find all registered routes
+- **Smart Tool Generation**: Converts HTTP endpoints to MCP tools with proper schemas
+- **Customizable Output**: Generates standalone TypeScript/JavaScript files you can edit
+- **Multiple Transports**: Supports both stdio and SSE (Server-Sent Events) transports
+- **Nested Router Support**: Handles sub-routers mounted with `app.use()`
+- **Zero Runtime Dependencies**: Generated files are self-contained with embedded MCP protocol implementation
 
 ## Table of Contents
 
@@ -121,7 +121,7 @@ async function main() {
     transport: 'stdio'
   });
   
-  console.log('✅ MCP server generated!');
+  console.log('MCP server generated!');
 }
 
 main();
@@ -508,11 +508,11 @@ await generateMcpServer(app, {
 Make sure routes are defined **before** calling `generateMcpServer()`:
 
 ```typescript
-// ✅ Correct
+// Correct
 app.get('/users', handler);
 await generateMcpServer(app, options);
 
-// ❌ Wrong
+// Wrong
 await generateMcpServer(app, options);
 app.get('/users', handler); // Too late!
 ```
@@ -537,14 +537,14 @@ For more troubleshooting, see the [Troubleshooting Guide](./docs/troubleshooting
 
 ## Documentation
 
-- 📖 [Complete Documentation](./docs/README.md) - Full documentation index
-- 🚀 [Quick Start Guide](./docs/quick-start.md) - Get up and running in 5 minutes
-- 📚 [API Reference](./docs/api-reference.md) - Complete API documentation
-- ⚙️ [Configuration Guide](./docs/configuration.md) - All configuration options
-- 🔧 [Tool Schema Reference](./docs/tool-schema.md) - How routes become tools
-- 🎓 [Basic Concepts](./docs/concepts.md) - Understanding the architecture
-- 💡 [FAQ](./docs/faq.md) - Frequently asked questions
-- 🔍 [MCP Protocol](./docs/mcp-protocol.md) - Understanding the protocol
+- [Complete Documentation](./docs/README.md) - Full documentation index
+- [Quick Start Guide](./docs/quick-start.md) - Get up and running in 5 minutes
+- [API Reference](./docs/api-reference.md) - Complete API documentation
+- [Configuration Guide](./docs/configuration.md) - All configuration options
+- [Tool Schema Reference](./docs/tool-schema.md) - How routes become tools
+- [Basic Concepts](./docs/concepts.md) - Understanding the architecture
+- [FAQ](./docs/faq.md) - Frequently asked questions
+- [MCP Protocol](./docs/mcp-protocol.md) - Understanding the protocol
 
 ## Examples
 
@@ -593,12 +593,12 @@ The generated MCP server supports standard MCP JSON-RPC methods:
 
 The generated MCP server file is fully editable. You can:
 
-- ✏️ Modify tool names and descriptions
-- 🔒 Add authentication headers
-- ✅ Adjust input schemas (add validation, change types)
-- ⚠️ Add custom error handling
-- 🔄 Transform request/response data
-- 🎨 Modify the HTTP request logic
+- Modify tool names and descriptions
+- Add authentication headers
+- Adjust input schemas (add validation, change types)
+- Add custom error handling
+- Transform request/response data
+- Modify the HTTP request logic
 
 ## Requirements
 
@@ -651,4 +651,4 @@ https://github.com/mr-anvesh/express-mcp
 
 ---
 
-**Made with ❤️ by d0minator**
+**Made by d0minator**

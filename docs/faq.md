@@ -54,11 +54,11 @@ All routes defined via:
 **Middleware is not extracted** as it's not a route. Only actual routes (with HTTP methods) become tools.
 
 ```typescript
-// ❌ Not extracted (middleware)
+// Not extracted (middleware)
 app.use(express.json());
 app.use('/uploads', express.static('public'));
 
-// ✅ Extracted (routes)
+// Extracted (routes)
 app.get('/users', ...);
 app.post('/users', ...);
 ```
@@ -68,13 +68,13 @@ app.post('/users', ...);
 **Basic parameter extraction only.** The library extracts standard `:param` parameters:
 
 ```typescript
-// ✅ Supported
+// Supported
 app.get('/users/:id', ...)
 
-// ⚠️ Extracted as 'id', regex ignored
+// Extracted as 'id', regex ignored
 app.get('/users/:id(\\d+)', ...)
 
-// ❌ Not supported (custom regex)
+// Not supported (custom regex)
 app.get(/^\/users\/(\d+)$/, ...)
 ```
 
@@ -388,11 +388,11 @@ Your Express app has no routes defined when you call `generateMcpServer()`.
 
 Define routes before generating:
 ```typescript
-// ❌ Wrong
+// Wrong
 await generateMcpServer(app, options);
 app.get('/users', ...);
 
-// ✅ Correct
+// Correct
 app.get('/users', ...);
 await generateMcpServer(app, options);
 ```
@@ -402,16 +402,16 @@ await generateMcpServer(app, options);
 ### vs Writing MCP server manually?
 
 **Manual**:
-- ✅ Full control
-- ✅ Optimized for your needs
-- ❌ Time-consuming
-- ❌ Requires MCP protocol knowledge
+- Full control
+- Optimized for your needs
+- Time-consuming
+- Requires MCP protocol knowledge
 
 **express-mcp-server**:
-- ✅ Instant generation
-- ✅ No MCP knowledge needed
-- ✅ Can still customize after
-- ⚠️ Generic schemas (customize after)
+- Instant generation
+- No MCP knowledge needed
+- Can still customize after
+- Generic schemas (customize after)
 
 ### vs Using @modelcontextprotocol/sdk?
 

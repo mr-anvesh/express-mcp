@@ -539,13 +539,13 @@ The generated schemas are intentionally generic. You can customize them by editi
 
 ## Schema Best Practices
 
-✅ **DO:**
+**DO:**
 - Keep generated schemas as starting point
 - Add validation rules in customization
 - Document parameter meanings in descriptions
 - Use appropriate JSON Schema types
 
-❌ **DON'T:**
+**DON'T:**
 - Over-specify in the generator (customize after)
 - Remove the `query` parameter (useful for filtering)
 - Make body required for PATCH (partial updates)

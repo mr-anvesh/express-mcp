@@ -54,14 +54,14 @@ Express MCP Server bridges the gap between traditional REST APIs and AI assistan
 
 ## Features at a Glance
 
-✅ Automatic route extraction from Express apps  
-✅ Support for Express 4 and 5  
-✅ Nested router support with correct path prefixes  
-✅ Path parameters, query params, and request bodies  
-✅ TypeScript and JavaScript output  
-✅ stdio and SSE transports  
-✅ Zero runtime dependencies in generated files  
-✅ Fully customizable output  
+- Automatic route extraction from Express apps  
+- Support for Express 4 and 5  
+- Nested router support with correct path prefixes  
+- Path parameters, query params, and request bodies  
+- TypeScript and JavaScript output  
+- stdio and SSE transports  
+- Zero runtime dependencies in generated files  
+- Fully customizable output  
 
 ## Need Help?
 

@@ -21,7 +21,7 @@ interface GenerateOptions {
 ### expressBaseUrl
 
 **Type**: `string`  
-**Required**: ✅ Yes  
+**Required**: Yes  
 **Default**: None
 
 The base URL where your Express server is running. The generated MCP server will make HTTP requests to this URL.
@@ -58,15 +58,15 @@ The base URL where your Express server is running. The generated MCP server will
 
 #### Best Practices
 
-✅ **DO:**
+**DO:**
 - Use `http://localhost` for local development
 - Include the protocol (`http://` or `https://`)
 - Use environment variables for different environments
 
-❌ **DON'T:**
-- Include a trailing slash: `http://localhost:3000/` ❌
-- Forget the protocol: `localhost:3000` ❌
-- Include route paths: `http://localhost:3000/api` ❌
+**DON'T:**
+- Include a trailing slash: `http://localhost:3000/`
+- Forget the protocol: `localhost:3000`
+- Include route paths: `http://localhost:3000/api`
 
 #### Environment-Based Configuration
 
@@ -87,7 +87,7 @@ await generateMcpServer(app, {
 ### outputPath
 
 **Type**: `string`  
-**Required**: ✅ Yes  
+**Required**: Yes  
 **Default**: None
 
 File path where the generated MCP server will be written. Can be absolute or relative.
@@ -125,12 +125,12 @@ File path where the generated MCP server will be written. Can be absolute or rel
 
 #### Best Practices
 
-✅ **DO:**
+**DO:**
 - Use descriptive names: `user-api-mcp.ts`
 - Keep generated files separate from source code
 - Use `.ts` extension for TypeScript, `.js` for JavaScript
 
-❌ **DON'T:**
+**DON'T:**
 - Overwrite source files
 - Use special characters in filenames
 - Put generated files in `node_modules`
@@ -161,7 +161,7 @@ await generateMcpServer(app, {
 ### typescript
 
 **Type**: `boolean`  
-**Required**: ❌ No  
+**Required**: No  
 **Default**: `true`
 
 Whether to generate TypeScript or JavaScript code.
@@ -229,7 +229,7 @@ async function callTool(name, args) {
 ### transport
 
 **Type**: `'stdio' | 'sse'`  
-**Required**: ❌ No  
+**Required**: No  
 **Default**: `'stdio'`
 
 The transport protocol for the MCP server.
@@ -306,10 +306,10 @@ curl -X POST http://localhost:3001/message \
 | Feature | stdio | SSE |
 |---------|-------|-----|
 | Communication | Standard I/O | HTTP |
-| Port required | ❌ No | ✅ Yes |
-| Web browser support | ❌ No | ✅ Yes |
-| Claude Desktop | ✅ Yes | ❌ No |
-| CORS support | N/A | ✅ Yes |
+| Port required | No | Yes |
+| Web browser support | No | Yes |
+| Claude Desktop | Yes | No |
+| CORS support | N/A | Yes |
 | Best for | Desktop apps | Web apps |
 
 ---
@@ -317,7 +317,7 @@ curl -X POST http://localhost:3001/message \
 ### mcpPort
 
 **Type**: `number`  
-**Required**: ✅ Yes (if `transport: 'sse'`)  
+**Required**: Yes (if `transport: 'sse'`)  
 **Default**: None
 
 Port number for the MCP server when using SSE transport.
@@ -349,12 +349,12 @@ Port number for the MCP server when using SSE transport.
 
 #### Port Selection Guidelines
 
-✅ **Good choices:**
+**Good choices:**
 - `3001` - Common choice (Express on 3000, MCP on 3001)
 - `4000+` - Avoid conflicts with common services
 - `8080` - Traditional HTTP alternative port
 
-❌ **Avoid:**
+**Avoid:**
 - `80` - Requires root privileges
 - `443` - Requires root privileges
 - `3000` - Often used by Express
@@ -480,20 +480,20 @@ MCP_PORT=3001
 The library performs basic validation:
 
 ```typescript
-// ❌ Missing required fields
+// Missing required fields
 await generateMcpServer(app, {
   // Error: expressBaseUrl is required
   outputPath: './mcp-server.ts'
 });
 
-// ❌ Invalid transport
+// Invalid transport
 await generateMcpServer(app, {
   expressBaseUrl: 'http://localhost:3000',
   outputPath: './mcp-server.ts',
   transport: 'invalid' // Error: must be 'stdio' or 'sse'
 });
 
-// ❌ SSE without port
+// SSE without port
 await generateMcpServer(app, {
   expressBaseUrl: 'http://localhost:3000',
   outputPath: './mcp-server.ts',

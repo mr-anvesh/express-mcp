@@ -40,7 +40,7 @@ export async function generateMcpServer(
   // Generate MCP server file
   await generateMcpServerFile(routes, options);
 
-  console.log(`✓ Generated MCP server with ${routes.length} tools at: ${options.outputPath}`);
+  console.log(`Generated MCP server with ${routes.length} tools at: ${options.outputPath}`);
 }
 
 // Re-export types for convenience

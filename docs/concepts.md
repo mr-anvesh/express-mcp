@@ -179,10 +179,10 @@ A standalone file that:
 
 ### It's NOT...
 
-❌ **A modification to your Express app** - Your app stays the same  
-❌ **Runtime middleware** - It's a separate process  
-❌ **A replacement for Express** - It complements Express  
-❌ **An API gateway** - It's specifically for MCP protocol
+**A modification to your Express app** - Your app stays the same  
+**Runtime middleware** - It's a separate process  
+**A replacement for Express** - It complements Express  
+**An API gateway** - It's specifically for MCP protocol
 
 ## Architecture Patterns
 
@@ -243,15 +243,15 @@ await generateMcpServer(app, {
 ### Why Code Generation?
 
 **Advantages:**
-✅ **Customizable** - You can edit the generated file  
-✅ **No dependencies** - Generated file is self-contained  
-✅ **Transparent** - You see exactly what code runs  
-✅ **Debuggable** - Step through generated code  
-✅ **Flexible** - Modify tool names, schemas, behavior
+**Customizable** - You can edit the generated file  
+**No dependencies** - Generated file is self-contained  
+**Transparent** - You see exactly what code runs  
+**Debuggable** - Step through generated code  
+**Flexible** - Modify tool names, schemas, behavior
 
 **Trade-offs:**
-⚠️ **Regenerate needed** - Changes to routes require regeneration  
-⚠️ **Two files** - Source app + generated server
+**Regenerate needed** - Changes to routes require regeneration  
+**Two files** - Source app + generated server
 
 ### Alternative: Runtime Approach (Not Implemented)
 

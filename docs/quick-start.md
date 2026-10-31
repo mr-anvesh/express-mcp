@@ -56,7 +56,7 @@ await generateMcpServer(app, {
   transport: 'stdio'
 });
 
-console.log('✓ MCP server generated!');
+console.log('MCP server generated!');
 ```
 
 Run the generator:
@@ -204,4 +204,4 @@ Save as `example.ts` and run:
 npx tsx example.ts
 ```
 
-That's it! You now have a working MCP server. 🎉
+That's it! You now have a working MCP server.
