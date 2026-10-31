@@ -1,5 +1,10 @@
 # express-mcp-server
 
+[![npm version](https://badge.fury.io/js/express-mcp-server.svg)](https://www.npmjs.com/package/express-mcp-server)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+
 A TypeScript library that automatically generates MCP (Model Context Protocol) servers from Express.js applications. It extracts all routes from your Express app and creates a standalone MCP server file where each endpoint becomes an MCP tool.
 
 ## Features
