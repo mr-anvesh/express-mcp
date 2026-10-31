@@ -1,0 +1,25 @@
+{
+  "name": "mcp",
+  "version": "1.0.0",
+  "description": "A tool that creates an mcp server for your current express routes.",
+  "keywords": [
+    "mcp",
+    "server",
+    "express"
+  ],
+  "homepage": "https://github.com/mr-anvesh/express-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/mr-anvesh/express-mcp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mr-anvesh/express-mcp.git"
+  },
+  "license": "ISC",
+  "author": "d0minator",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
