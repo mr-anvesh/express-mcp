@@ -1,5 +1,5 @@
 {
-  "name": "mcp-bridge",
+  "name": "express-mcp-server",
   "version": "1.0.1",
   "description": "A tool that creates an mcp server for your current express routes.",
   "keywords": [
