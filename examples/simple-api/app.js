@@ -58,4 +58,3 @@ apiRouter.get('/posts/:id', (req, res) => {
 app.use('/api', apiRouter);
 // Export app (don't start the server here)
 export default app;
-//# sourceMappingURL=app.js.map

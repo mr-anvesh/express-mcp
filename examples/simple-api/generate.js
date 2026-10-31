@@ -23,4 +23,3 @@ async function main() {
     }
 }
 main();
-//# sourceMappingURL=generate.js.map

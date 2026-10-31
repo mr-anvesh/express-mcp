@@ -196,11 +196,13 @@ function generateFileContent(tools: GeneratedTool[], options: GenerateOptions): 
     '',
     '// ===== Server Bootstrap =====',
     '',
-    "const server = new McpServer('express-mcp-server', '1.0.0');",
-    '',
-    'tools.forEach(tool => server.registerTool(tool));',
-    '',
-    `server.start('${transport}'${mcpPort ? `, ${mcpPort}` : ''});`,
+    "(async () => {",
+    "  const server = new McpServer('express-mcp-server', '1.0.0');",
+    '  ',
+    '  tools.forEach(tool => server.registerTool(tool));',
+    '  ',
+    `  await server.start('${transport}'${mcpPort ? `, ${mcpPort}` : ''});`,
+    "})();",
   ];
 
   return parts.join('\n');

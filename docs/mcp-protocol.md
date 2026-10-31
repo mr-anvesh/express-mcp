@@ -1,0 +1,587 @@
+# MCP Protocol Reference
+
+Understanding the Model Context Protocol used by express-mcp-server.
+
+## Overview
+
+**MCP (Model Context Protocol)** is a JSON-RPC 2.0 based protocol for AI assistants to interact with tools and services. It defines a standard way to:
+
+- List available tools
+- Call tools with parameters
+- Return structured results
+
+## JSON-RPC 2.0 Basics
+
+MCP uses JSON-RPC 2.0 for message exchange.
+
+### Request Message
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "method_name",
+  "params": { },
+  "id": 1
+}
+```
+
+**Fields:**
+- `jsonrpc`: Always `"2.0"`
+- `method`: Method name to call
+- `params`: Parameters object (optional)
+- `id`: Request identifier (number or string)
+
+### Response Message
+
+**Success:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": { }
+}
+```
+
+**Error:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32600,
+    "message": "Invalid Request",
+    "data": {}
+  }
+}
+```
+
+## MCP Methods
+
+### initialize
+
+Establishes connection and exchanges capabilities.
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "initialize",
+  "params": {},
+  "id": 1
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {
+      "tools": {}
+    },
+    "serverInfo": {
+      "name": "express-mcp-server",
+      "version": "1.0.0"
+    }
+  }
+}
+```
+
+**Purpose:**
+- Handshake between client and server
+- Exchange supported protocol version
+- Declare server capabilities
+- Provide server metadata
+
+### tools/list
+
+Lists all available tools.
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/list",
+  "params": {},
+  "id": 2
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [
+      {
+        "name": "get_users",
+        "description": "GET /users",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "object",
+              "description": "Query parameters"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_users_by_id",
+        "description": "GET /users/:id",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "User ID"
+            }
+          },
+          "required": ["id"]
+        }
+      }
+    ]
+  }
+}
+```
+
+**Purpose:**
+- Discover available tools
+- Get tool descriptions
+- Understand input schemas
+
+### tools/call
+
+Executes a tool with given arguments.
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "get_users_by_id",
+    "arguments": {
+      "id": "123"
+    }
+  },
+  "id": 3
+}
+```
+
+**Response (Success):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"id\":\"123\",\"name\":\"Alice\",\"email\":\"alice@example.com\"}"
+      }
+    ]
+  }
+}
+```
+
+**Response (Error):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "error": {
+    "code": -32603,
+    "message": "Tool execution failed: HTTP 404: Not Found"
+  }
+}
+```
+
+**Purpose:**
+- Execute tool functionality
+- Pass typed parameters
+- Return structured content
+
+## Error Codes
+
+Standard JSON-RPC 2.0 error codes:
+
+| Code | Message | Meaning |
+|------|---------|---------|
+| -32700 | Parse error | Invalid JSON |
+| -32600 | Invalid Request | JSON-RPC structure invalid |
+| -32601 | Method not found | Method doesn't exist |
+| -32602 | Invalid params | Invalid method parameters |
+| -32603 | Internal error | Server-side error |
+
+### Express MCP Server Error Codes
+
+The generated server uses these codes:
+
+**-32601: Method not found**
+```json
+{
+  "error": {
+    "code": -32601,
+    "message": "Method not found: invalid_method"
+  }
+}
+```
+
+**-32602: Invalid params / Tool not found**
+```json
+{
+  "error": {
+    "code": -32602,
+    "message": "Tool not found: invalid_tool"
+  }
+}
+```
+
+**-32603: Tool execution error**
+```json
+{
+  "error": {
+    "code": -32603,
+    "message": "Tool execution failed: HTTP 500: Internal Server Error",
+    "data": {
+      "stack": "Error: ...\n  at ..."
+    }
+  }
+}
+```
+
+**-32700: Parse error**
+```json
+{
+  "error": {
+    "code": -32700,
+    "message": "Parse error"
+  }
+}
+```
+
+## Tool Content Types
+
+Tools return content in the `result.content` array:
+
+### Text Content
+
+```json
+{
+  "type": "text",
+  "text": "Plain text or JSON string"
+}
+```
+
+**Usage:**
+Most common type. Used for JSON responses from Express:
+```json
+{
+  "type": "text",
+  "text": "{\"id\":1,\"name\":\"Alice\"}"
+}
+```
+
+### Image Content
+
+```json
+{
+  "type": "image",
+  "data": "base64...",
+  "mimeType": "image/png"
+}
+```
+
+**Usage:**
+For image responses (not generated by default, customize as needed).
+
+### Resource Content
+
+```json
+{
+  "type": "resource",
+  "uri": "file:///path/to/resource"
+}
+```
+
+**Usage:**
+For referencing resources (not generated by default).
+
+## Protocol Flow
+
+### Complete Session Example
+
+```
+Client                          Server
+  │                               │
+  ├──[1] initialize─────────────>│
+  │<─────────────────────────────┤
+  │         (capabilities)        │
+  │                               │
+  ├──[2] tools/list──────────────>│
+  │<─────────────────────────────┤
+  │         (tool definitions)    │
+  │                               │
+  ├──[3] tools/call───────────────>│
+  │      (name: get_users)        │
+  │                               ├──> Express API
+  │                               │       GET /users
+  │                               │<──────┤
+  │<─────────────────────────────┤
+  │         (user data)           │
+  │                               │
+  ├──[4] tools/call───────────────>│
+  │      (name: post_users)       │
+  │                               ├──> Express API
+  │                               │       POST /users
+  │                               │<──────┤
+  │<─────────────────────────────┤
+  │         (created user)        │
+```
+
+### Step-by-Step
+
+**1. Initialize**
+
+Client sends:
+```bash
+echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | node mcp-server.js
+```
+
+Server responds with capabilities.
+
+**2. List Tools**
+
+Client sends:
+```bash
+echo '{"jsonrpc":"2.0","method":"tools/list","id":2}' | node mcp-server.js
+```
+
+Server responds with tool catalog.
+
+**3. Call Tool**
+
+Client sends:
+```bash
+echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_users","arguments":{}},"id":3}' | node mcp-server.js
+```
+
+Server:
+1. Validates tool exists
+2. Makes HTTP request to Express
+3. Returns response as content
+
+## Transports
+
+MCP supports multiple transport mechanisms:
+
+### stdio Transport
+
+**Communication:** Standard input/output  
+**Format:** Line-delimited JSON
+
+**Client sends:**
+```
+{"jsonrpc":"2.0","method":"initialize","id":1}\n
+```
+
+**Server responds:**
+```
+{"jsonrpc":"2.0","id":1,"result":{...}}\n
+```
+
+**Use cases:**
+- Claude Desktop
+- CLI tools
+- Piped communication
+
+**Example:**
+```bash
+node mcp-server.js <<EOF
+{"jsonrpc":"2.0","method":"initialize","id":1}
+{"jsonrpc":"2.0","method":"tools/list","id":2}
+EOF
+```
+
+### SSE (Server-Sent Events) Transport
+
+**Communication:** HTTP with Server-Sent Events  
+**Format:** HTTP POST for requests, SSE for responses
+
+**Endpoints:**
+
+**POST /message** - Send JSON-RPC requests
+```bash
+curl -X POST http://localhost:3001/message \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+**GET /sse** - Receive server events
+```bash
+curl http://localhost:3001/sse
+```
+
+**Use cases:**
+- Web applications
+- Browser-based clients
+- HTTP-based integrations
+
+## Tool Input Schema
+
+Tools define their inputs using JSON Schema Draft 7:
+
+### Basic Schema
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "param1": {
+      "type": "string",
+      "description": "Parameter description"
+    }
+  },
+  "required": ["param1"]
+}
+```
+
+### Supported Types
+
+```json
+{
+  "properties": {
+    "stringParam": { "type": "string" },
+    "numberParam": { "type": "number" },
+    "booleanParam": { "type": "boolean" },
+    "objectParam": { "type": "object" },
+    "arrayParam": { "type": "array" }
+  }
+}
+```
+
+### Validation Keywords
+
+```json
+{
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email",
+      "minLength": 5,
+      "maxLength": 100
+    },
+    "age": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 150
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  }
+}
+```
+
+## Implementation in Generated Server
+
+### Message Handler
+
+```typescript
+async handleMessage(message: McpRequest): Promise<McpResponse> {
+  const { method, params, id } = message;
+
+  switch (method) {
+    case 'initialize':
+      return this.handleInitialize(id);
+    
+    case 'tools/list':
+      return this.handleToolsList(id);
+    
+    case 'tools/call':
+      return await this.handleToolsCall(params, id);
+    
+    default:
+      return this.errorResponse(id, -32601, 'Method not found');
+  }
+}
+```
+
+### Tool Execution
+
+```typescript
+private async handleToolsCall(params: any, id: number | string): Promise<McpResponse> {
+  const { name, arguments: args } = params;
+  const tool = this.tools.get(name);
+
+  if (!tool) {
+    return this.errorResponse(id, -32602, `Tool not found: ${name}`);
+  }
+
+  try {
+    const result = await callTool(name, args);
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(result, null, 2)
+          }
+        ]
+      }
+    };
+  } catch (error: any) {
+    return this.errorResponse(id, -32603, `Tool execution failed: ${error.message}`);
+  }
+}
+```
+
+## Testing the Protocol
+
+### Manual Testing with curl
+
+**Initialize:**
+```bash
+echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | node mcp-server.js
+```
+
+**List tools:**
+```bash
+echo '{"jsonrpc":"2.0","method":"tools/list","id":2}' | node mcp-server.js | jq .
+```
+
+**Call tool:**
+```bash
+echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_users","arguments":{}},"id":3}' | node mcp-server.js | jq .
+```
+
+### Testing with SSE
+
+**Initialize:**
+```bash
+curl -X POST http://localhost:3001/message \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"initialize","id":1}' | jq .
+```
+
+**List tools:**
+```bash
+curl -X POST http://localhost:3001/message \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":2}' | jq .
+```
+
+## See Also
+
+- [Tool Schema Reference](./tool-schema.md) - How schemas are generated
+- [Transports Guide](./transports.md) - stdio vs SSE in detail
+- [MCP Specification](https://spec.modelcontextprotocol.io/) - Official MCP spec

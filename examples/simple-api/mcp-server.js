@@ -96,17 +96,17 @@ class McpServer {
             },
         };
     }
-    start(transport = 'stdio', port) {
+    async start(transport = 'stdio', port) {
         if (transport === 'stdio') {
-            this.startStdio();
+            await this.startStdio();
         }
         else {
-            this.startSSE(port || 3001);
+            await this.startSSE(port || 3001);
         }
     }
-    startStdio() {
-        const readline = require('readline');
-        const rl = readline.createInterface({
+    async startStdio() {
+        const { createInterface } = await import('readline');
+        const rl = createInterface({
             input: process.stdin,
             output: process.stdout,
             terminal: false,
@@ -131,9 +131,9 @@ class McpServer {
         });
         process.stderr.write(`MCP Server '${this.serverName}' started on stdio\n`);
     }
-    startSSE(port) {
-        const http = require('http');
-        const url = require('url');
+    async startSSE(port) {
+        const { default: http } = await import('http');
+        const { default: url } = await import('url');
         const server = http.createServer(async (req, res) => {
             const parsedUrl = url.parse(req.url, true);
             // CORS headers
@@ -306,8 +306,8 @@ const tools = [
         },
     },
     {
-        name: 'get_posts',
-        description: 'GET /posts',
+        name: 'get_api_posts',
+        description: 'GET /api/posts',
         inputSchema: {
             "type": "object",
             "properties": {
@@ -320,8 +320,8 @@ const tools = [
         },
     },
     {
-        name: 'get_posts_by_id',
-        description: 'GET /posts/:id',
+        name: 'get_api_posts_by_id',
+        description: 'GET /api/posts/:id',
         inputSchema: {
             "type": "object",
             "properties": {
@@ -469,8 +469,8 @@ async function callTool(name, args) {
                 return await response.text();
             }
         }
-        case 'get_posts': {
-            let url = `${baseUrl}/posts`;
+        case 'get_api_posts': {
+            let url = `${baseUrl}/api/posts`;
             if (args.query && Object.keys(args.query).length > 0) {
                 const queryString = new URLSearchParams(args.query).toString();
                 url += (url.includes('?') ? '&' : '?') + queryString;
@@ -489,8 +489,8 @@ async function callTool(name, args) {
                 return await response.text();
             }
         }
-        case 'get_posts_by_id': {
-            let url = `${baseUrl}/posts/${args.id}`;
+        case 'get_api_posts_by_id': {
+            let url = `${baseUrl}/api/posts/${args.id}`;
             if (args.query && Object.keys(args.query).length > 0) {
                 const queryString = new URLSearchParams(args.query).toString();
                 url += (url.includes('?') ? '&' : '?') + queryString;
@@ -514,8 +514,9 @@ async function callTool(name, args) {
     }
 }
 // ===== Server Bootstrap =====
-const server = new McpServer('express-mcp-server', '1.0.0');
-tools.forEach(tool => server.registerTool(tool));
-server.start('stdio');
+(async () => {
+    const server = new McpServer('express-mcp-server', '1.0.0');
+    tools.forEach(tool => server.registerTool(tool));
+    await server.start('stdio');
+})();
 export {};
-//# sourceMappingURL=mcp-server.js.map

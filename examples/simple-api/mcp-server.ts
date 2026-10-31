@@ -154,17 +154,17 @@ class McpServer {
     };
   }
 
-  start(transport: 'stdio' | 'sse' = 'stdio', port?: number): void {
+  async start(transport: 'stdio' | 'sse' = 'stdio', port?: number): Promise<void> {
     if (transport === 'stdio') {
-      this.startStdio();
+      await this.startStdio();
     } else {
-      this.startSSE(port || 3001);
+      await this.startSSE(port || 3001);
     }
   }
 
-  private startStdio(): void {
-    const readline = require('readline');
-    const rl = readline.createInterface({
+  private async startStdio(): Promise<void> {
+    const { createInterface } = await import('readline');
+    const rl = createInterface({
       input: process.stdin,
       output: process.stdout,
       terminal: false,
@@ -193,9 +193,9 @@ class McpServer {
     process.stderr.write(`MCP Server '${this.serverName}' started on stdio\n`);
   }
 
-  private startSSE(port: number): void {
-    const http = require('http');
-    const url = require('url');
+  private async startSSE(port: number): Promise<void> {
+    const { default: http } = await import('http');
+    const { default: url } = await import('url');
 
     const server = http.createServer(async (req: any, res: any) => {
       const parsedUrl = url.parse(req.url, true);
@@ -607,8 +607,10 @@ async function callTool(name: string, args: any): Promise<any> {
 
 // ===== Server Bootstrap =====
 
-const server = new McpServer('express-mcp-server', '1.0.0');
-
-tools.forEach(tool => server.registerTool(tool));
-
-server.start('stdio');
+(async () => {
+  const server = new McpServer('express-mcp-server', '1.0.0');
+  
+  tools.forEach(tool => server.registerTool(tool));
+  
+  await server.start('stdio');
+})();
