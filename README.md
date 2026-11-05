@@ -73,7 +73,7 @@ Or add it to your `package.json`:
 {
   "dependencies": {
     "express": "^4.18.2",
-    "express-mcp-server": "^1.0.1"
+    "express-mcp-server": "^1.0.3"
   }
 }
 ```
@@ -669,7 +669,7 @@ The generated MCP server file is fully editable. You can:
     "express": "^4.18.2"
   },
   "devDependencies": {
-    "express-mcp-server": "^1.0.1",
+    "express-mcp-server": "^1.0.3",
     "typescript": "^5.3.3",
     "tsx": "^4.7.0",
     "concurrently": "^8.2.2"
