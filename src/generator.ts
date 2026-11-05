@@ -14,6 +14,7 @@ export async function generateMcpServerFile(
 
   const fileContent = generateFileContent(generatedTools, options);
 
+  await fs.mkdir(path.dirname(options.outputPath), { recursive: true });
   await fs.writeFile(options.outputPath, fileContent, 'utf-8');
 }
 
