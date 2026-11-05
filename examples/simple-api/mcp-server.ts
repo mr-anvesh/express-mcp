@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 
 
-// ===== MCP Protocol Implementation (JSON-RPC 2.0) =====
+// ===== MCP Protocol Implementation (2026-07-28, JSON-RPC 2.0) =====
+
+const MCP_PROTOCOL_VERSION = '2026-07-28';
+const CACHE_TTL_MS = 60_000;
 
 interface McpTool {
   name: string;
   description: string;
   inputSchema: {
-    type: 'object';
+    type: string;
     properties: Record<string, any>;
     required?: string[];
   };
@@ -16,18 +19,18 @@ interface McpTool {
 interface McpRequest {
   jsonrpc: '2.0';
   method: string;
-  params?: any;
+  params?: Record<string, any>;
   id?: number | string;
 }
 
 interface McpResponse {
   jsonrpc: '2.0';
-  id: number | string;
-  result?: any;
+  id: number | string | null;
+  result?: Record<string, any>;
   error?: {
     code: number;
     message: string;
-    data?: any;
+    data?: Record<string, any>;
   };
 }
 
@@ -46,25 +49,33 @@ class McpServer {
   }
 
   async handleMessage(message: McpRequest): Promise<McpResponse> {
-    const { method, params, id } = message;
+    if (!message || typeof message !== 'object') {
+      return this.errorResponse(null, -32600, 'Invalid Request');
+    }
 
-    if (id === undefined) {
-      throw new Error('Request ID is required');
+    const { method, params, id } = message;
+    if (message.jsonrpc !== '2.0' || id === undefined || typeof method !== 'string') {
+      return this.errorResponse(id ?? null, -32600, 'Invalid Request');
+    }
+
+    const metadataError = this.validateRequestMetadata(params);
+    if (metadataError) {
+      return this.errorResponse(id, metadataError.code, metadataError.message, metadataError.data);
     }
 
     try {
       switch (method) {
-        case 'initialize':
-          return this.handleInitialize(id);
+        case 'server/discover':
+          return this.handleDiscover(id);
 
         case 'tools/list':
           return this.handleToolsList(id);
 
         case 'tools/call':
-          if (!params?.name) {
+          if (typeof params?.name !== 'string' || params.name.length === 0) {
             return this.errorResponse(id, -32602, 'Missing tool name in params');
           }
-          return await this.handleToolsCall(params.name, params.arguments || {}, id);
+          return await this.handleToolsCall(params.name, params.arguments ?? {}, id);
 
         default:
           return this.errorResponse(id, -32601, `Method not found: ${method}`);
@@ -74,42 +85,68 @@ class McpServer {
     }
   }
 
-  private handleInitialize(id: number | string): McpResponse {
+  private validateRequestMetadata(params: Record<string, any> | undefined): {
+    code: number;
+    message: string;
+    data?: Record<string, any>;
+  } | undefined {
+    const meta = params?._meta;
+    if (!meta || typeof meta !== 'object') {
+      return { code: -32602, message: 'Missing required request metadata' };
+    }
+
+    const requestedVersion = meta['io.modelcontextprotocol/protocolVersion'];
+    if (typeof requestedVersion !== 'string') {
+      return { code: -32602, message: 'Missing MCP protocol version in request metadata' };
+    }
+    if (requestedVersion !== MCP_PROTOCOL_VERSION) {
+      return {
+        code: -32022,
+        message: 'Unsupported protocol version',
+        data: { requested: requestedVersion, supported: [MCP_PROTOCOL_VERSION] },
+      };
+    }
+
+    if (!meta['io.modelcontextprotocol/clientCapabilities'] ||
+      typeof meta['io.modelcontextprotocol/clientCapabilities'] !== 'object') {
+      return { code: -32602, message: 'Missing client capabilities in request metadata' };
+    }
+  }
+
+  private handleDiscover(id: number | string): McpResponse {
     return {
       jsonrpc: '2.0',
       id,
       result: {
-        protocolVersion: '2024-11-05',
-        capabilities: {
-          tools: {},
-        },
-        serverInfo: {
-          name: this.serverName,
-          version: this.serverVersion,
-        },
+        resultType: 'complete',
+        supportedVersions: [MCP_PROTOCOL_VERSION],
+        capabilities: { tools: {} },
+        instructions: 'This server exposes an Express API as MCP tools.',
+        ttlMs: CACHE_TTL_MS,
+        cacheScope: 'public',
       },
     };
   }
 
   private handleToolsList(id: number | string): McpResponse {
-    const tools = Array.from(this.tools.values());
     return {
       jsonrpc: '2.0',
       id,
       result: {
-        tools,
+        resultType: 'complete',
+        tools: Array.from(this.tools.values()),
+        ttlMs: CACHE_TTL_MS,
+        cacheScope: 'public',
       },
     };
   }
 
   private async handleToolsCall(
     name: string,
-    args: any,
+    args: Record<string, any>,
     id: number | string
   ): Promise<McpResponse> {
-    const tool = this.tools.get(name);
-
-    if (!tool) {
+    if (!this.tools.has(name)) {
       return this.errorResponse(id, -32602, `Tool not found: ${name}`);
     }
 
@@ -119,29 +156,35 @@ class McpServer {
         jsonrpc: '2.0',
         id,
         result: {
+          resultType: 'complete',
           content: [
             {
               type: 'text',
               text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
             },
           ],
+          ...(result !== undefined && { structuredContent: result }),
         },
       };
     } catch (error: any) {
-      return this.errorResponse(
+      // Tool failures are results so MCP clients can give the model a chance to recover.
+      return {
+        jsonrpc: '2.0',
         id,
-        -32603,
-        `Tool execution failed: ${error.message}`,
-        { stack: error.stack }
-      );
+        result: {
+          resultType: 'complete',
+          isError: true,
+          content: [{ type: 'text', text: `Tool execution failed: ${error.message}` }],
+        },
+      };
     }
   }
 
   private errorResponse(
-    id: number | string,
+    id: number | string | null,
     code: number,
     message: string,
-    data?: any
+    data?: Record<string, any>
   ): McpResponse {
     return {
       jsonrpc: '2.0',
@@ -154,109 +197,107 @@ class McpServer {
     };
   }
 
-  async start(transport: 'stdio' | 'sse' = 'stdio', port?: number): Promise<void> {
+  async start(transport: 'stdio' | 'streamable-http' = 'stdio', port?: number): Promise<void> {
     if (transport === 'stdio') {
       await this.startStdio();
     } else {
-      await this.startSSE(port || 3001);
+      await this.startStreamableHttp(port || 3001);
     }
   }
 
   private async startStdio(): Promise<void> {
     const { createInterface } = await import('readline');
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      terminal: false,
-    });
+    const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
 
     rl.on('line', async (line: string) => {
       try {
-        const message = JSON.parse(line);
-        const response = await this.handleMessage(message);
-        console.log(JSON.stringify(response));
+        const response = await this.handleMessage(JSON.parse(line));
+        process.stdout.write(JSON.stringify(response) + '\n');
       } catch (error: any) {
-        console.error(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: null,
-            error: {
-              code: -32700,
-              message: 'Parse error',
-              data: { error: error.message },
-            },
-          })
-        );
+        process.stdout.write(JSON.stringify({
+          jsonrpc: '2.0',
+          id: null,
+          error: { code: -32700, message: 'Parse error', data: { error: error.message } },
+        }) + '\n');
       }
     });
 
-    process.stderr.write(`MCP Server '${this.serverName}' started on stdio\n`);
+    process.stderr.write(`MCP Server '${this.serverName}' started on stdio (${MCP_PROTOCOL_VERSION})\n`);
   }
 
-  private async startSSE(port: number): Promise<void> {
-    const { default: http } = await import('http');
-    const { default: url } = await import('url');
+  private async startStreamableHttp(port: number): Promise<void> {
+    const { createServer } = await import('http');
 
-    const server = http.createServer(async (req: any, res: any) => {
-      const parsedUrl = url.parse(req.url, true);
-
-      // CORS headers
+    const server = createServer(async (req, res) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name');
 
       if (req.method === 'OPTIONS') {
-        res.writeHead(200);
+        res.writeHead(204);
         res.end();
         return;
       }
-
-      if (parsedUrl.pathname === '/sse' && req.method === 'GET') {
-        // SSE endpoint
-        res.writeHead(200, {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        });
-
-        res.write('data: {"jsonrpc":"2.0","method":"connected"}\n\n');
-
-        req.on('close', () => {
-          res.end();
-        });
-      } else if (parsedUrl.pathname === '/message' && req.method === 'POST') {
-        // Message endpoint
-        let body = '';
-        req.on('data', (chunk: any) => {
-          body += chunk.toString();
-        });
-
-        req.on('end', async () => {
-          try {
-            const message = JSON.parse(body);
-            const response = await this.handleMessage(message);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(response));
-          } catch (error: any) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(
-              JSON.stringify({
-                jsonrpc: '2.0',
-                id: null,
-                error: { code: -32700, message: 'Parse error' },
-              })
-            );
-          }
-        });
-      } else {
+      if (req.method !== 'POST' || req.url !== '/mcp') {
         res.writeHead(404);
         res.end('Not Found');
+        return;
       }
+
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => { body += chunk; });
+      req.on('end', async () => {
+        let message: McpRequest;
+        try {
+          message = JSON.parse(body);
+        } catch {
+          this.writeHttpResponse(res, this.errorResponse(null, -32700, 'Parse error'), 400);
+          return;
+        }
+
+        if (!message || typeof message !== 'object') {
+          this.writeHttpResponse(res, this.errorResponse(null, -32600, 'Invalid Request'), 400);
+          return;
+        }
+
+        const headerError = this.validateHttpHeaders(req.headers, message);
+        if (headerError) {
+          this.writeHttpResponse(res, headerError, 400);
+          return;
+        }
+
+        const response = await this.handleMessage(message);
+        this.writeHttpResponse(res, response, response.error?.code === -32022 ? 400 : 200);
+      });
     });
 
     server.listen(port, () => {
-      process.stderr.write(`MCP Server '${this.serverName}' started on http://localhost:${port}\n`);
+      process.stderr.write(`MCP Server '${this.serverName}' started on http://localhost:${port}/mcp (${MCP_PROTOCOL_VERSION})\n`);
     });
+  }
+
+  private validateHttpHeaders(headers: Record<string, string | string[] | undefined>, message: McpRequest): McpResponse | undefined {
+    const getHeader = (name: string): string | undefined => {
+      const value = headers[name.toLowerCase()];
+      return Array.isArray(value) ? value[0] : value;
+    };
+    const id = message.id ?? null;
+    const metaVersion = message.params?._meta?.['io.modelcontextprotocol/protocolVersion'];
+
+    if (typeof metaVersion !== 'string' ||
+      getHeader('mcp-protocol-version') !== metaVersion ||
+      getHeader('mcp-method') !== message.method) {
+      return this.errorResponse(id, -32020, 'MCP request headers do not match the request body');
+    }
+    if (message.method === 'tools/call' && getHeader('mcp-name') !== message.params?.name) {
+      return this.errorResponse(id, -32020, 'Mcp-Name header does not match the tool name');
+    }
+  }
+
+  private writeHttpResponse(res: any, response: McpResponse, status: number): void {
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(response));
   }
 }
 

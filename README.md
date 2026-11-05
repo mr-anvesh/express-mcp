@@ -12,9 +12,37 @@ A TypeScript library that automatically generates MCP (Model Context Protocol) s
 - **Automatic Route Extraction**: Walks through your Express router stack to find all registered routes
 - **Smart Tool Generation**: Converts HTTP endpoints to MCP tools with proper schemas
 - **Customizable Output**: Generates standalone TypeScript/JavaScript files you can edit
-- **Multiple Transports**: Supports both stdio and SSE (Server-Sent Events) transports
+- **Multiple Transports**: Supports stdio and stateless Streamable HTTP transports
 - **Nested Router Support**: Handles sub-routers mounted with `app.use()`
 - **Zero Runtime Dependencies**: Generated files are self-contained with embedded MCP protocol implementation
+
+## Roadmap
+
+The roadmap focuses on keeping generated MCP servers compatible, useful, and
+efficient for agents working with larger Express APIs. Check this section to
+track progress as features are implemented.
+
+### Completed
+
+- [x] Support the MCP `2026-07-28` protocol revision
+- [x] Implement `server/discover`, `tools/list`, and `tools/call`
+- [x] Support stdio and stateless Streamable HTTP transports
+- [x] Include cache hints for discovery responses
+
+### Planned
+
+- [ ] Add deterministic, paginated `tools/list` responses with cursors
+- [ ] Add richer tool metadata, including titles, output schemas, and safety annotations
+- [ ] Support `notifications/tools/list_changed` when the available tool set changes
+- [ ] Add configurable route groups and prefixes so only relevant tool sets are exposed
+- [ ] Add lazy tool discovery through a small catalog and on-demand tool-schema lookup
+- [ ] Expose route documentation and schemas as MCP resources
+- [ ] Evaluate migration to the official MCP TypeScript SDK while preserving standalone generated output
+
+> **Context efficiency:** Pagination reduces response size, but clients may still
+> load every page into the model context. Route groups, catalog-based discovery,
+> and MCP resources are the primary strategies for keeping large APIs from
+> filling agent context by default.
 
 ## Table of Contents
 
@@ -26,6 +54,7 @@ A TypeScript library that automatically generates MCP (Model Context Protocol) s
 - [Integration Patterns](#integration-patterns)
 - [Real-World Examples](#real-world-examples)
 - [Best Practices](#best-practices)
+- [Roadmap](#roadmap)
 - [Tips & Tricks](#tips--tricks)
 - [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
@@ -190,7 +219,7 @@ const config = {
     expressBaseUrl: 'https://api.myapp.com',
     outputPath: './dist/mcp-server.js',
     typescript: false,
-    transport: 'sse',
+    transport: 'streamable-http',
     mcpPort: 3001
   }
 };
@@ -252,8 +281,8 @@ Generates an MCP server file from an Express application.
   - `expressBaseUrl: string` - Base URL of your Express server (required)
   - `outputPath: string` - Where to write the generated MCP server file (required)
   - `typescript?: boolean` - Generate TypeScript (`.ts`) or JavaScript (`.js`). Default: `true`
-  - `transport?: 'stdio' | 'sse'` - Transport type. Default: `'stdio'`
-  - `mcpPort?: number` - Port for MCP server when using SSE transport
+  - `transport?: 'stdio' | 'streamable-http'` - Transport type. Default: `'stdio'`
+  - `mcpPort?: number` - Port for MCP server when using Streamable HTTP transport
 
 #### Example
 
@@ -456,24 +485,35 @@ Add to Claude Desktop config:
 
 ### For Web Applications
 
-Use SSE transport with a port:
+Use Streamable HTTP transport with a port:
 ```typescript
 await generateMcpServer(app, {
   expressBaseUrl: 'http://localhost:3000',
   outputPath: './mcp-server.ts',
-  transport: 'sse',
+  transport: 'streamable-http',
   mcpPort: 3001
 });
 ```
 
 Connect from browser:
 ```javascript
-fetch('http://localhost:3001/message', {
+fetch('http://localhost:3001/mcp', {
   method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'MCP-Protocol-Version': '2026-07-28',
+    'Mcp-Method': 'tools/list'
+  },
   body: JSON.stringify({
     jsonrpc: '2.0',
     method: 'tools/list',
-    id: 1
+    id: 1,
+    params: {
+      _meta: {
+        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        'io.modelcontextprotocol/clientCapabilities': {}
+      }
+    }
   })
 });
 ```
@@ -560,20 +600,20 @@ The generated MCP server supports standard MCP JSON-RPC methods:
 
 ### JSON-RPC Methods
 
-- `initialize` - Handshake and capability negotiation
+- `server/discover` - Discover protocol versions and capabilities
 - `tools/list` - List all available tools
 - `tools/call` - Execute a tool (make HTTP request to Express endpoint)
 
 ### Example Messages
 
-**Initialize:**
+**Discover server capabilities:**
 ```json
-{"jsonrpc":"2.0","method":"initialize","params":{},"id":1}
+{"jsonrpc":"2.0","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}},"id":1}
 ```
 
 **List tools:**
 ```json
-{"jsonrpc":"2.0","method":"tools/list","id":2}
+{"jsonrpc":"2.0","method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}},"id":2}
 ```
 
 **Call a tool:**
@@ -583,7 +623,11 @@ The generated MCP server supports standard MCP JSON-RPC methods:
   "method":"tools/call",
   "params":{
     "name":"get_users_by_id",
-    "arguments":{"id":"123"}
+    "arguments":{"id":"123"},
+    "_meta":{
+      "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities":{}
+    }
   },
   "id":3
 }

@@ -102,7 +102,7 @@ Your MCP server is now running and ready to accept JSON-RPC messages!
 Send a JSON-RPC message to test (in another terminal):
 
 ```bash
-echo '{"jsonrpc":"2.0","method":"initialize","params":{},"id":1}' | npx tsx mcp-server.ts
+echo '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | npx tsx mcp-server.ts
 ```
 
 You should see a response like:
@@ -112,14 +112,13 @@ You should see a response like:
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "protocolVersion": "2024-11-05",
+    "resultType": "complete",
+    "supportedVersions": ["2026-07-28"],
     "capabilities": {
       "tools": {}
     },
-    "serverInfo": {
-      "name": "express-mcp-server",
-      "version": "1.0.0"
-    }
+    "ttlMs": 60000,
+    "cacheScope": "public"
   }
 }
 ```
@@ -127,7 +126,7 @@ You should see a response like:
 List available tools:
 
 ```bash
-echo '{"jsonrpc":"2.0","method":"tools/list","id":2}' | npx tsx mcp-server.ts
+echo '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | npx tsx mcp-server.ts
 ```
 
 Call a tool:

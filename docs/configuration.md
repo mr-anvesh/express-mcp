@@ -11,8 +11,8 @@ interface GenerateOptions {
   expressBaseUrl: string;      // Required
   outputPath: string;          // Required
   typescript?: boolean;        // Optional, default: true
-  transport?: 'stdio' | 'sse'; // Optional, default: 'stdio'
-  mcpPort?: number;            // Optional, required for SSE
+  transport?: 'stdio' | 'streamable-http'; // Optional, default: 'stdio'
+  mcpPort?: number;            // Optional, required for Streamable HTTP
 }
 ```
 
@@ -228,7 +228,7 @@ async function callTool(name, args) {
 
 ### transport
 
-**Type**: `'stdio' | 'sse'`  
+**Type**: `'stdio' | 'streamable-http'`
 **Required**: No  
 **Default**: `'stdio'`
 
@@ -256,26 +256,27 @@ The transport protocol for the MCP server.
 **Running the server:**
 ```bash
 # Read from stdin, write to stdout
-echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | node mcp-server.js
+echo '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | node mcp-server.js
 
 # Interactive mode
 node mcp-server.js
 ```
 
-#### SSE Transport
+#### Streamable HTTP Transport
 
 ```typescript
 {
-  transport: 'sse',
+  transport: 'streamable-http',
   mcpPort: 3001
 }
 ```
 
 **Characteristics:**
-- HTTP server with Server-Sent Events
+- Stateless Streamable HTTP server
 - Listens on the specified port
 - Supports CORS for web clients
-- Two endpoints: `/sse` (SSE) and `/message` (POST)
+- One endpoint: `POST /mcp`
+- Requires `MCP-Protocol-Version` and `Mcp-Method` headers (plus `Mcp-Name` for tool calls)
 
 **Use cases:**
 - Web-based MCP clients
@@ -285,25 +286,22 @@ node mcp-server.js
 **Running the server:**
 ```bash
 node mcp-server.js
-# MCP Server 'express-mcp-server' started on http://localhost:3001
+# MCP Server 'express-mcp-server' started on http://localhost:3001/mcp (2026-07-28)
 ```
 
 **Making requests:**
 ```bash
-# Initialize
-curl -X POST http://localhost:3001/message \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"initialize","id":1}'
-
 # List tools
-curl -X POST http://localhost:3001/message \
+curl -X POST http://localhost:3001/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","id":2}'
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/list" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
 #### Comparison Table
 
-| Feature | stdio | SSE |
+| Feature | stdio | Streamable HTTP |
 |---------|-------|-----|
 | Communication | Standard I/O | HTTP |
 | Port required | No | Yes |
@@ -317,16 +315,16 @@ curl -X POST http://localhost:3001/message \
 ### mcpPort
 
 **Type**: `number`  
-**Required**: Yes (if `transport: 'sse'`)  
+**Required**: Yes (if `transport: 'streamable-http'`)
 **Default**: None
 
-Port number for the MCP server when using SSE transport.
+Port number for the MCP server when using Streamable HTTP transport.
 
 #### Examples
 
 ```typescript
 {
-  transport: 'sse',
+  transport: 'streamable-http',
   mcpPort: 3001
 }
 ```
@@ -334,7 +332,7 @@ Port number for the MCP server when using SSE transport.
 **Custom port:**
 ```typescript
 {
-  transport: 'sse',
+  transport: 'streamable-http',
   mcpPort: 8080
 }
 ```
@@ -342,7 +340,7 @@ Port number for the MCP server when using SSE transport.
 **Using environment variable:**
 ```typescript
 {
-  transport: 'sse',
+  transport: 'streamable-http',
   mcpPort: parseInt(process.env.MCP_PORT || '3001')
 }
 ```
@@ -369,7 +367,7 @@ try {
   await generateMcpServer(app, {
     expressBaseUrl: 'http://localhost:3000',
     outputPath: './mcp-server.ts',
-    transport: 'sse',
+    transport: 'streamable-http',
     mcpPort
   });
 } catch (error) {
@@ -408,7 +406,7 @@ await generateMcpServer(app, {
   expressBaseUrl: process.env.API_URL || 'https://api.example.com',
   outputPath: './dist/mcp-server.js',
   typescript: false,
-  transport: 'sse',
+  transport: 'streamable-http',
   mcpPort: parseInt(process.env.MCP_PORT || '3001')
 });
 ```
@@ -427,14 +425,14 @@ const config = {
     expressBaseUrl: 'https://staging-api.example.com',
     outputPath: './dist/mcp-server.js',
     typescript: false,
-    transport: 'sse' as const,
+    transport: 'streamable-http' as const,
     mcpPort: 3001
   },
   production: {
     expressBaseUrl: 'https://api.example.com',
     outputPath: './dist/mcp-server.js',
     typescript: false,
-    transport: 'sse' as const,
+    transport: 'streamable-http' as const,
     mcpPort: 3001
   }
 };
@@ -457,7 +455,7 @@ await generateMcpServer(app, {
   expressBaseUrl: process.env.EXPRESS_BASE_URL!,
   outputPath: process.env.MCP_OUTPUT_PATH || './mcp-server.ts',
   typescript: process.env.MCP_TYPESCRIPT === 'true',
-  transport: (process.env.MCP_TRANSPORT as 'stdio' | 'sse') || 'stdio',
+  transport: (process.env.MCP_TRANSPORT as 'stdio' | 'streamable-http') || 'stdio',
   mcpPort: parseInt(process.env.MCP_PORT || '3001')
 });
 ```
@@ -490,15 +488,15 @@ await generateMcpServer(app, {
 await generateMcpServer(app, {
   expressBaseUrl: 'http://localhost:3000',
   outputPath: './mcp-server.ts',
-  transport: 'invalid' // Error: must be 'stdio' or 'sse'
+  transport: 'invalid' // Error: must be 'stdio' or 'streamable-http'
 });
 
-// SSE without port
+// Streamable HTTP without port
 await generateMcpServer(app, {
   expressBaseUrl: 'http://localhost:3000',
   outputPath: './mcp-server.ts',
-  transport: 'sse'
-  // Error: mcpPort required for SSE transport
+  transport: 'streamable-http'
+  // Error: mcpPort required for Streamable HTTP transport
 });
 ```
 

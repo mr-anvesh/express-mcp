@@ -174,7 +174,7 @@ npx tsx mcp-server.ts
 node mcp-server.js
 ```
 
-**SSE transport:**
+**Streamable HTTP transport:**
 ```bash
 node mcp-server.js
 # Server starts on http://localhost:3001
@@ -218,7 +218,7 @@ pm2 start mcp-server.js
 - Command-line MCP clients
 - Any tool that can pipe JSON-RPC over stdin/stdout
 
-**SSE transport:**
+**Streamable HTTP transport:**
 - Web applications
 - Browser extensions
 - HTTP-based MCP clients
@@ -241,7 +241,7 @@ See [Generated Files](./generated-files.md) for details.
 
 They use only Node.js built-ins:
 - `readline` (for stdio)
-- `http` (for SSE)
+- `http` (for Streamable HTTP)
 - `fetch` (for HTTP requests to Express)
 
 **The library itself**: Depends on `express` (peer dependency) for types only.

@@ -124,7 +124,7 @@ A standalone file that:
    node mcp-server.ts
    ```
 
-6. **AI client connects** via stdio or SSE
+6. **AI client connects** via stdio or Streamable HTTP
 
 7. **Client calls tool**:
    ```json

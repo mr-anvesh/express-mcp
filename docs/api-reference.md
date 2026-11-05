@@ -35,8 +35,8 @@ Configuration object with the following properties:
 | `expressBaseUrl` | `string` | Yes | - | Base URL where your Express server runs |
 | `outputPath` | `string` | Yes | - | Path where the MCP server file will be written |
 | `typescript` | `boolean` | No | `true` | Generate TypeScript (`.ts`) or JavaScript (`.js`) |
-| `transport` | `'stdio' \| 'sse'` | No | `'stdio'` | Transport protocol for the MCP server |
-| `mcpPort` | `number` | No | `undefined` | Port for SSE transport (required if `transport: 'sse'`) |
+| `transport` | `'stdio' \| 'streamable-http'` | No | `'stdio'` | Transport protocol for the MCP server |
+| `mcpPort` | `number` | No | `undefined` | Port for Streamable HTTP transport (required if `transport: 'streamable-http'`) |
 
 #### Returns
 
@@ -58,13 +58,13 @@ await generateMcpServer(app, {
 });
 ```
 
-**With SSE transport:**
+**With Streamable HTTP transport:**
 
 ```typescript
 await generateMcpServer(app, {
   expressBaseUrl: 'http://localhost:3000',
   outputPath: './mcp-server.ts',
-  transport: 'sse',
+  transport: 'streamable-http',
   mcpPort: 3001
 });
 ```
@@ -127,7 +127,7 @@ interface GenerateOptions {
   expressBaseUrl: string;
   outputPath: string;
   typescript?: boolean;
-  transport?: 'stdio' | 'sse';
+  transport?: 'stdio' | 'streamable-http';
   mcpPort?: number;
 }
 ```
@@ -176,28 +176,28 @@ typescript: true  // generates .ts file
 typescript: false  // generates .js file
 ```
 
-**`transport?: 'stdio' | 'sse'`** (optional, default: `'stdio'`)
+**`transport?: 'stdio' | 'streamable-http'`** (optional, default: `'stdio'`)
 
 The transport protocol for the MCP server.
 
 - `'stdio'`: Standard input/output (for CLI tools, Claude Desktop)
-- `'sse'`: Server-Sent Events over HTTP (for web clients)
+- `'streamable-http'`: Stateless Streamable HTTP at `POST /mcp` (for web clients)
 
 ```typescript
 // stdio transport (default)
 transport: 'stdio'
 
-// SSE transport
-transport: 'sse',
+// Streamable HTTP transport
+transport: 'streamable-http',
 mcpPort: 3001
 ```
 
 **`mcpPort?: number`** (optional)
 
-Port number for the MCP server when using SSE transport. Required if `transport: 'sse'`.
+Port number for the MCP server when using Streamable HTTP transport. Required if `transport: 'streamable-http'`.
 
 ```typescript
-transport: 'sse',
+transport: 'streamable-http',
 mcpPort: 3001  // MCP server listens on http://localhost:3001
 ```
 
