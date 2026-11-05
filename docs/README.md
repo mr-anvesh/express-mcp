@@ -18,7 +18,7 @@ Welcome to the express-mcp-server documentation! This library automatically gene
 ### Advanced Usage
 - [Nested Routers](./nested-routers.md) - Working with sub-routers
 - [Customization](./customization.md) - Customizing generated servers
-- [Transports](./transports.md) - stdio vs SSE transports
+- [Transports](./transports.md) - stdio vs Streamable HTTP transports
 - [Authentication](./authentication.md) - Adding auth to MCP tools
 
 ### Examples
@@ -59,7 +59,7 @@ Express MCP Server bridges the gap between traditional REST APIs and AI assistan
 - Nested router support with correct path prefixes  
 - Path parameters, query params, and request bodies  
 - TypeScript and JavaScript output  
-- stdio and SSE transports  
+- stdio and Streamable HTTP transports
 - Zero runtime dependencies in generated files  
 - Fully customizable output  
 

@@ -167,7 +167,7 @@ app.listen(3000)  // Must match!
 netstat -an | grep 3000
 ```
 
-### Port Already in Use (SSE)
+### Port Already in Use (Streamable HTTP)
 
 **Problem:**
 ```
@@ -191,7 +191,7 @@ kill -9 <PID>
 mcpPort: 3002  // Try another port
 ```
 
-### CORS Errors (SSE Transport)
+### CORS Errors (Streamable HTTP Transport)
 
 **Problem:**
 ```
@@ -200,7 +200,7 @@ Access to fetch blocked by CORS policy
 
 **Solution:**
 
-The generated SSE server includes CORS headers. If still seeing errors, verify:
+The generated Streamable HTTP server includes CORS headers. If still seeing errors, verify:
 
 1. Check generated server has CORS:
 ```typescript
@@ -237,7 +237,7 @@ Invalid JSON sent to MCP server.
 
 Validate JSON before sending:
 ```bash
-echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | jq .
+echo '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq .
 ```
 
 ### Method Not Found
@@ -253,13 +253,13 @@ echo '{"jsonrpc":"2.0","method":"initialize","id":1}' | jq .
 ```
 
 **Valid methods:**
-- `initialize`
+- `server/discover`
 - `tools/list`
 - `tools/call`
 
 **Example:**
 ```json
-{"jsonrpc":"2.0","method":"tools/list","id":1}
+{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
 ```
 
 ### Tool Not Found
@@ -470,14 +470,14 @@ node generate-mcp.ts
 
 **Problem:**
 
-Using stdio client with SSE server or vice versa.
+Using a stdio client with a Streamable HTTP server or vice versa.
 
 **Match them:**
 
 | Server Transport | Client Type |
 |------------------|-------------|
 | stdio | Claude Desktop, CLI clients |
-| SSE | Web clients, HTTP requests |
+| Streamable HTTP | Web clients, HTTP requests |
 
 ### 4. Editing Generated File Then Regenerating
 

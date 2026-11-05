@@ -18,14 +18,14 @@ export interface ExpressRoute {
 export interface GenerateOptions {
   /** Base URL of the Express server (e.g., http://localhost:3000) */
   expressBaseUrl: string;
-  /** Port for MCP server (when using SSE transport) */
+  /** Port for MCP server (when using Streamable HTTP transport) */
   mcpPort?: number;
   /** Path where the generated MCP server file will be written */
   outputPath: string;
   /** Generate TypeScript (.ts) or JavaScript (.js) */
   typescript?: boolean;
   /** Transport type for MCP server */
-  transport?: 'stdio' | 'sse';
+  transport?: 'stdio' | 'streamable-http';
 }
 
 /**
