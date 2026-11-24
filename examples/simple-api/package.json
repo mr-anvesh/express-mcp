@@ -5,11 +5,10 @@
   "scripts": {
     "build": "tsc",
     "start": "node server.js",
-    "generate": "tsx generate.ts"
+    "generate": "npm run build && node generate.js"
   },
   "devDependencies": {
     "express": "^4.21.2",
-    "express-mcp-server": "../..",
-    "tsx": "^4.19.2"
+    "express-mcp-server": "../.."
   }
 }

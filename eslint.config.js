@@ -12,9 +12,20 @@ export default tseslint.config(
     },
   },
   {
-    files: ['test/**/*.mjs'],
+    files: ['test/**/*.mjs', 'scripts/**/*.mjs', 'runtime/**/*.mjs'],
     languageOptions: {
-      globals: { process: 'readonly', fetch: 'readonly' },
+      globals: {
+        process: 'readonly',
+        fetch: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        AbortController: 'readonly',
+        AbortSignal: 'readonly',
+        performance: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
     },
   },
 );

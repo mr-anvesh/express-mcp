@@ -1,25 +1,55 @@
 import { promises as fs } from 'node:fs';
+import { createRequire } from 'node:module';
 import type { ExpressRoute, GenerateOptions, GeneratedTool, McpTool } from './types.js';
-import { createMcpProtocolTemplate } from './templates/mcp-protocol.js';
+import { validateOptions } from './options.js';
 
 /** Generate a standalone MCP server file from Express routes. */
 export async function generateMcpServerFile(
   routes: ExpressRoute[],
   options: GenerateOptions,
 ): Promise<void> {
-  const tools = routes.map(generateTool);
-  await fs.writeFile(options.outputPath, generateFileContent(tools, options), 'utf8');
+  const tools = routes.map((route) => generateTool(route, options.contracts));
+  const names = new Map<string, string>();
+  for (const tool of tools) {
+    const endpoint = `${tool.route.method} ${tool.route.path}`;
+    const existing = names.get(tool.name);
+    if (existing !== undefined && existing !== endpoint) {
+      throw new Error(
+        `Tool name "${tool.name}" is ambiguous between ${existing} and ${endpoint}. Refine the selected routes.`,
+      );
+    }
+    names.set(tool.name, endpoint);
+  }
+  await fs.writeFile(options.outputPath, await generateFileContent(tools, options), 'utf8');
 }
 
-function generateTool(route: ExpressRoute): GeneratedTool {
+function generateTool(route: ExpressRoute, contracts: GenerateOptions['contracts']): GeneratedTool {
   const name = generateToolName(route.method, route.path);
+  if (name.length > 128) throw new Error('Generated tool name exceeds 128 characters: ' + name);
+  const contract = contracts?.[name];
+  const base = generateToolSchema(route);
+  const custom = contract?.inputSchema;
+  if (custom && custom.type !== 'object')
+    throw new Error('Tool inputSchema must describe an object: ' + name);
+  // Keep local references relative to the author's root schema.
+  const inputSchema = custom
+    ? {
+        ...custom,
+        type: 'object' as const,
+        properties: { ...base.properties, ...(custom.properties as object) },
+        allOf: [...((custom.allOf ?? []) as Record<string, unknown>[]), base],
+        required: [
+          ...new Set([...(base.required ?? []), ...((custom.required ?? []) as string[])]),
+        ],
+      }
+    : base;
   return {
     name,
     description: `${route.method} ${route.path}. Calls the Express endpoint and returns its response.`,
-    inputSchema: generateToolSchema(route),
+    inputSchema,
+    ...(contract?.outputSchema && { outputSchema: contract.outputSchema }),
     annotations: generateToolAnnotations(route.method),
     route,
-    handlerName: `handle_${name}`,
   };
 }
 
@@ -27,18 +57,17 @@ function generateToolName(method: string, routePath: string): string {
   const parts = routePath
     .split('/')
     .filter(Boolean)
-    .map((part) =>
-      part.startsWith(':') ? `by_${part.slice(1)}` : part.replace(/[^a-zA-Z0-9]/g, '_'),
-    );
+    .map((part) => part.replace(/:([a-zA-Z0-9_]+)/g, 'by_$1').replace(/[^a-zA-Z0-9]/g, '_'));
   return [method.toLowerCase(), ...parts].join('_').replace(/__+/g, '_');
 }
 
 function generateToolAnnotations(method: string): NonNullable<McpTool['annotations']> {
   const upperMethod = method.toUpperCase();
+  const readOnly = ['GET', 'HEAD', 'OPTIONS'].includes(upperMethod);
   return {
-    readOnlyHint: ['GET', 'HEAD', 'OPTIONS'].includes(upperMethod),
+    readOnlyHint: readOnly,
     idempotentHint: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(upperMethod),
-    destructiveHint: upperMethod === 'DELETE',
+    destructiveHint: !readOnly,
   };
 }
 
@@ -47,7 +76,7 @@ function generateToolSchema(route: ExpressRoute): McpTool['inputSchema'] {
   const required: string[] = [];
 
   for (const param of route.params) {
-    properties[param] = { type: 'string', description: `Path parameter: ${param}` };
+    properties[param] = { type: 'string', minLength: 1, description: `Path parameter: ${param}` };
     required.push(param);
   }
 
@@ -79,84 +108,63 @@ function generateToolSchema(route: ExpressRoute): McpTool['inputSchema'] {
  * All data literals are JSON encoded so route names, URLs, and descriptions
  * cannot change the generated program's syntax.
  */
-export function generateFileContent(tools: GeneratedTool[], options: GenerateOptions): string {
-  const transport = options.transport ?? 'stdio';
-  const httpOptions = options.http ?? {};
-  const typescript = options.typescript ?? true;
-  const toolsLiteral = JSON.stringify(
-    tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      annotations: tool.annotations,
-    })),
-    null,
-    2,
+async function generateFileContent(
+  tools: GeneratedTool[],
+  options: GenerateOptions,
+): Promise<string> {
+  const config = validateOptions(
+    options,
+    tools.map((t) => t.name),
   );
-  const routeCases = tools.map(generateToolCase).join('\n\n');
-
-  return [
+  if (options.contracts) {
+    const runtime = createRequire(import.meta.url)('./runtime.bundle.cjs') as {
+      prepareTools(tools: GeneratedTool[]): unknown;
+    };
+    runtime.prepareTools(tools);
+  }
+  const bundle = await fs.readFile(new URL('./runtime.bundle.cjs', import.meta.url), 'utf8');
+  const lines = [
     '#!/usr/bin/env node',
     '// Generated by express-mcp-server. Regenerate instead of editing this file.',
-    '',
-    createMcpProtocolTemplate(typescript),
-    '',
-    `const tools${typescript ? ': McpTool[]' : ''} = ${toolsLiteral};`,
-    '',
-    'function addQuery(url, query) {',
-    '  if (!query || typeof query !== "object" || Array.isArray(query)) return url;',
-    '  const search = new URLSearchParams();',
-    '  for (const [key, value] of Object.entries(query)) {',
-    '    const values = Array.isArray(value) ? value : [value];',
-    '    for (const item of values) {',
-    '      if (!["string", "number", "boolean"].includes(typeof item)) {',
-    '        throw new Error(`Query parameter ${key} must be a primitive or an array of primitives`);',
-    '      }',
-    '      search.append(key, String(item));',
-    '    }',
-    '  }',
-    '  const queryString = search.toString();',
-    '  return queryString ? `${url}${url.includes("?") ? "&" : "?"}${queryString}` : url;',
+    ...(options.typescript === false ? [] : ['// @ts-nocheck']),
+    'async function main() {',
+    '  const {createRequire} = await import("node:module");',
+    '  const require = createRequire(process.argv[1]);',
+    '  const runtime = (() => {',
+    '    const module = {exports:{}};',
+    bundle,
+    '    return module.exports;',
+    '  })();',
+  ];
+  if (options.mode === 'import') {
+    if (config.transport === 'stdio') {
+      lines.push(
+        '  const {Console} = await import("node:console");',
+        '  globalThis.console = new Console(process.stderr);',
+      );
+    }
+    lines.push(
+      `  const app = (await import(${JSON.stringify(options.appModule)}))[${JSON.stringify(options.appExport ?? 'default')}];`,
+      '  if (typeof app !== "function" || typeof app.handle !== "function") throw new Error("Expected an exported Express application");',
+    );
+  } else lines.push('  const app = undefined;');
+  const module = options.http?.oauth?.delegateModule;
+  lines.push(
+    module
+      ? `  const delegate = (await import(${JSON.stringify(module)})).default;`
+      : '  const delegate = undefined;',
+  );
+  if (module)
+    lines.push(
+      '  if (typeof delegate !== "function") throw new Error("Expected a default credential delegation function");',
+    );
+  // Parse generated data as JSON to preserve all literal keys, including __proto__.
+  const jsonLiteral = (value: unknown) => `JSON.parse(${JSON.stringify(JSON.stringify(value))})`;
+  lines.push(
+    `  await runtime.start(${jsonLiteral(config)}, ${jsonLiteral(tools)}, app, delegate);`,
     '}',
+    'main().catch(error => { console.error(error); process.exitCode = 1; });',
     '',
-    'async function callTool(name, args = {}) {',
-    `  const baseUrl = ${JSON.stringify(options.expressBaseUrl)}.replace(/\\/$/, '');`,
-    '  switch (name) {',
-    routeCases,
-    '    default:',
-    '      throw new Error(`Unknown tool: ${name}`);',
-    '  }',
-    '}',
-    '',
-    'const server = new McpServer("express-mcp-server", "1.0.0", callTool);',
-    'for (const tool of tools) server.registerTool(tool);',
-    `server.start(${JSON.stringify(transport)}, ${JSON.stringify(options.mcpPort ?? 3001)}, ${JSON.stringify(httpOptions)});`,
-    '',
-  ].join('\n');
-}
-
-function generateToolCase(tool: GeneratedTool): string {
-  const { route } = tool;
-  const needsBody = ['POST', 'PUT', 'PATCH'].includes(route.method);
-  const requestOptions = needsBody
-    ? `{ method: ${JSON.stringify(route.method)}, headers: { "Content-Type": "application/json" }, body: JSON.stringify(args.body ?? {}) }`
-    : `{ method: ${JSON.stringify(route.method)} }`;
-
-  return [
-    `    case ${JSON.stringify(tool.name)}: {`,
-    `      const pathTemplate = ${JSON.stringify(route.path)};`,
-    '      const requestPath = pathTemplate.replace(/:([A-Za-z0-9_]+)/g, (_match, parameter) => {',
-    '        if (args[parameter] === undefined || args[parameter] === null) {',
-    '          throw new Error(`Missing required path parameter: ${parameter}`);',
-    '        }',
-    '        return encodeURIComponent(String(args[parameter]));',
-    '      });',
-    '      const url = addQuery(`${baseUrl}${requestPath}`, args.query);',
-    `      const response = await fetch(url, ${requestOptions});`,
-    '      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);',
-    '      return response.headers.get("content-type")?.includes("application/json")',
-    '        ? response.json()',
-    '        : response.text();',
-    '    }',
-  ].join('\n');
+  );
+  return lines.join('\n');
 }

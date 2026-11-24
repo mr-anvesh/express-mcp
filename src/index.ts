@@ -31,7 +31,7 @@ export async function generateMcpServer(
   options: GenerateOptions,
 ): Promise<GenerationResult> {
   // Extract routes from Express app
-  const routes = extractRoutes(app);
+  const routes = extractRoutes(app, options.routes);
 
   if (routes.length === 0) {
     throw new Error(
@@ -75,10 +75,14 @@ function filterRoutes(routes: import('./types.js').ExpressRoute[], options: Gene
 
 // Re-export types for convenience
 export type {
+  CredentialDelegate,
+  ImportedRequestContext,
+  McpPrincipal,
   GenerateOptions,
   GenerationResult,
   HttpTransportOptions,
   RoutePattern,
+  RouteDefinition,
   ExpressRoute,
   McpTool,
 } from './types.js';

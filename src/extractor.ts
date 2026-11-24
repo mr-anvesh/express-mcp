@@ -1,170 +1,124 @@
 import type { Application } from 'express';
-import type { ExpressRoute } from './types.js';
-
-/**
- * Extract all routes from an Express application
- * Supports both Express 4 (_router) and Express 5 (router)
- */
-export function extractRoutes(app: Application): ExpressRoute[] {
-  const routes: ExpressRoute[] = [];
-
-  // Get the router - support both Express 4 and 5
-  const expressApp = app as unknown as { _router?: RouterLike; router?: RouterLike };
-  let router = expressApp._router;
-
-  // Express 4 exposes an `app.router` getter which deliberately throws. Only
-  // Express 5 needs this fallback; catching here preserves our useful error.
-  if (!router) {
-    try {
-      router = expressApp.router;
-    } catch {
-      router = undefined;
-    }
-  }
-
-  if (!router) {
-    throw new Error(
-      'No router found on Express app. Make sure you have defined at least one route.',
-    );
-  }
-
-  // Recursively walk the router stack
-  walkStack(router.stack, '', routes);
-
-  return routes;
-}
-
-/**
- * Recursively walk through router layers to extract routes
- */
-interface RouterLike {
-  stack?: Layer[];
-}
+import type { ExpressRoute, RouteDefinition } from './types.js';
 
 interface Layer {
-  route?: { path: string; methods: Record<string, boolean> };
+  route?: { path: unknown; methods: Record<string, boolean> };
   name?: string;
-  handle?: RouterLike;
-  path?: string;
-  regexp?: { source: string };
-  matchers?: Array<(path: string) => false | { path?: string }>;
+  handle?: { stack?: Layer[] };
+  regexp?: RegExp & { fast_slash?: boolean };
+  slash?: boolean;
 }
 
-function walkStack(stack: Layer[] | undefined, basePath: string, routes: ExpressRoute[]): void {
-  if (!stack) return;
+const supportedMethods = new Set(['GET', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH', 'DELETE']);
+const explicitRoutesHint =
+  'Supply explicit routes with full method/path templates in the routes option.';
 
-  for (const layer of stack) {
-    if (layer.route) {
-      // This is an actual route
-      const path = normalizePath(basePath + layer.route.path);
-      const methods = Object.keys(layer.route.methods).map((m) => m.toUpperCase());
-      const params = extractPathParams(path);
-
-      methods.forEach((method) => {
-        routes.push({ method, path, params });
-      });
-    } else if (layer.name === 'router' && layer.handle?.stack) {
-      // This is a sub-router mounted with app.use()
-      const mountPath = extractMountPath(layer);
-      walkStack(layer.handle.stack, basePath + mountPath, routes);
-    } else if (layer.name === 'bound dispatch' && layer.handle?.stack) {
-      // Alternative sub-router structure
-      const mountPath = extractMountPath(layer);
-      walkStack(layer.handle.stack, basePath + mountPath, routes);
+function makeRoute(method: string, path: string): ExpressRoute {
+  const upper = method.toUpperCase();
+  if (!supportedMethods.has(upper))
+    throw new Error(`Unsupported HTTP method ${upper}. ${explicitRoutesHint}`);
+  // Only emit paths that the executor can interpolate without changing their meaning.
+  const segments = path.split('/');
+  if (
+    !path.startsWith('/') ||
+    path.includes('//') ||
+    segments.some(
+      (part) =>
+        part === '.' || part === '..' || !/^(?:[A-Za-z0-9._~'-]|:[A-Za-z0-9_]+)*$/.test(part),
+    )
+  ) {
+    throw new Error(`Unsupported Express path "${path}". ${explicitRoutesHint}`);
+  }
+  const params = [...path.matchAll(/:([A-Za-z0-9_]+)/g)].map((match) => match[1]!);
+  for (const name of params) {
+    if (
+      name === 'query' ||
+      (name === 'body' && ['POST', 'PUT', 'PATCH'].includes(upper)) ||
+      Object.hasOwn(Object.prototype, name) ||
+      params.indexOf(name) !== params.lastIndexOf(name)
+    ) {
+      throw new Error(`Ambiguous path parameter "${name}" in ${upper} ${path}.`);
     }
   }
+  return { method: upper, path, params };
 }
 
-/**
- * Extract mount path from a router layer
- * Parses the regex pattern to determine the mount path
- */
-function extractMountPath(layer: Layer): string {
-  // First check if layer has a direct path property
-  if (layer.path && layer.path !== '/') {
-    return layer.path;
-  }
-
-  // Express 5 replaces `regexp` with matchers. Its matcher result includes the
-  // consumed path once it has matched a request, which is the only public
-  // representation available on a Layer. Prefer it when present.
-  const matchedPath = extractMatcherPath(layer.matchers);
-  if (matchedPath) return matchedPath;
-
-  // Express 4 stores the mount expression directly on the layer.
-  if (!layer.regexp) return '';
-
-  const source = layer.regexp.source;
-
-  // Common patterns:
-  // /^\/api\/?(?=\/|$)/i => /api
-  // /^\/?(?=\/|$)/i => / (root)
-  // /^\/api\/v1\/?(?=\/|$)/i => /api/v1
-
-  // Try to extract the path between ^\ and \/?
-  const match = source.match(/\^\\\/(.+?)\\\/\?/);
-
-  if (match && match[1]) {
-    const path = '/' + match[1].replace(/\\\//g, '/');
-    return path;
-  }
-
-  // Try alternative pattern without the trailing \/?
-  const match2 = source.match(/\^\\\/([^\\]+)/);
-
-  if (match2 && match2[1]) {
-    const path = '/' + match2[1].replace(/\\\//g, '/');
-    return path;
-  }
-
-  return '';
-}
-
-function extractMatcherPath(matchers: Layer['matchers']): string {
-  if (!matchers) return '';
-
-  // Express 5's matcher API is intentionally opaque. A Layer retains its
-  // consumed `path` after dispatch, but extraction also runs before requests.
-  // Probe common root and API prefixes so ordinary static mounts are recovered
-  // without relying on removed private `regexp` state. Parameterized mounts
-  // cannot be inferred safely and are therefore left out.
-  const candidates = ['', '/', '/api', '/api/v1', '/v1'];
-  for (const matcher of matchers) {
-    for (const candidate of candidates) {
-      const result = matcher(candidate);
-      if (result && result.path && result.path !== '/') return result.path;
+function mountPrefix(layer: Layer): string {
+  if (layer.slash || layer.regexp?.fast_slash) return '';
+  // Express 4 compiles a static mount to an anchored regexp with this exact suffix.
+  const source = layer.regexp?.source;
+  const suffix = String.raw`\/?(?=\/|$)`;
+  if (source?.startsWith('^') && source.endsWith(suffix)) {
+    const literal = source.slice(1, -suffix.length);
+    if (/^(?:\\\/|\\\.|[A-Za-z0-9_~'-])+$/.test(literal)) {
+      return literal.replace(/\\([/.])/g, '$1');
     }
   }
-  return '';
+  throw new Error(`Cannot infer Express router mount. ${explicitRoutesHint}`);
 }
 
-/**
- * Extract path parameters from a route path
- * Example: /users/:id/:action => ['id', 'action']
- */
-function extractPathParams(path: string): string[] {
-  const matches = path.match(/:([a-zA-Z0-9_]+)/g);
-  if (!matches) return [];
-
-  return matches.map((match) => match.slice(1)); // Remove ':' prefix
-}
-
-/**
- * Normalize path to ensure consistent formatting
- */
-function normalizePath(path: string): string {
-  // Remove duplicate slashes
-  path = path.replace(/\/+/g, '/');
-
-  // Ensure path starts with /
-  if (!path.startsWith('/')) {
-    path = '/' + path;
+/** Extract directly representable routes, or use an authoritative route manifest. */
+export function extractRoutes(
+  app: Application,
+  definitions?: readonly RouteDefinition[],
+): ExpressRoute[] {
+  const routes = new Map<string, ExpressRoute>();
+  function add(method: string, path: string) {
+    const route = makeRoute(method, path);
+    routes.set(route.method + ' ' + path, route);
+  }
+  if (definitions !== undefined) {
+    if (!Array.isArray(definitions)) throw new Error('routes must be an array.');
+    for (const entry of definitions) {
+      if (typeof entry?.method !== 'string' || typeof entry.path !== 'string') {
+        throw new Error('Each explicit route requires a string method and path.');
+      }
+      add(entry.method, entry.path);
+    }
+    return [...routes.values()];
   }
 
-  // Remove trailing slash (except for root)
-  if (path.length > 1 && path.endsWith('/')) {
-    path = path.slice(0, -1);
+  const application = app as unknown as {
+    _router?: { stack: Layer[] };
+    router?: { stack: Layer[] };
+  };
+  // Express 4's deprecated router getter throws if no routes were registered.
+  const router = application._router ?? getRouter();
+  function getRouter() {
+    try {
+      return application.router;
+    } catch {
+      return undefined;
+    }
   }
+  if (!router)
+    throw new Error('No router found on Express app. Register routes before generation.');
 
-  return path;
+  function walk(stack: Layer[], prefix: string, ancestors: Set<Layer[]>) {
+    if (ancestors.has(stack)) throw new Error(`Recursive router mount. ${explicitRoutesHint}`);
+    const parents = new Set(ancestors).add(stack);
+    for (const layer of stack) {
+      if (layer.route) {
+        const paths = Array.isArray(layer.route.path) ? layer.route.path : [layer.route.path];
+        for (const path of paths) {
+          if (typeof path !== 'string' || !path.startsWith('/')) {
+            throw new Error(
+              `Unsupported Express route under "${prefix || '/'}". ${explicitRoutesHint}`,
+            );
+          }
+          for (const [method, enabled] of Object.entries(layer.route.methods)) {
+            if (enabled) add(method, prefix + path);
+          }
+        }
+      } else if (layer.handle?.stack) {
+        walk(layer.handle.stack, prefix + mountPrefix(layer), parents);
+      } else if (layer.name === 'mounted_app') {
+        throw new Error(
+          `Cannot infer routes of a mounted Express application. ${explicitRoutesHint}`,
+        );
+      }
+    }
+  }
+  walk(router.stack, '', new Set());
+  return [...routes.values()];
 }

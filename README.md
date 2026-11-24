@@ -1,6 +1,6 @@
 # express-mcp-server
 
-Generate a standalone MCP server from selected routes in an Express 4 or 5 application. The generated server calls your existing HTTP API; it does not import your app at runtime.
+Generate a standalone MCP server from selected routes in an Express 4 or 5 application. Choose where operations run. In proxy mode the generated server calls an existing HTTP API. In import mode each MCP process loads the Express app and executes its routes and middleware in memory.
 
 ## Install
 
@@ -30,12 +30,37 @@ const result = await generateMcpServer(app, {
 console.log(`Generated ${result.toolCount} tools at ${result.outputPath}`);
 ```
 
-Run the API and generated server separately:
+In proxy mode, run the API and generated server separately.
 
 ```bash
 node server.js
 node mcp-server.js
 ```
+
+## Run independently with an imported app
+
+Export the configured Express application from a module. The module that calls `app.listen()` can remain the separate entry point for your existing API. For example, with a default export in `app.js`, run this generator alongside it.
+
+```js
+import app from './app.js';
+import { generateMcpServer } from 'express-mcp-server';
+
+await generateMcpServer(app, {
+  mode: 'import',
+  appModule: './app.js',
+  outputPath: './mcp-server.js',
+  typescript: false,
+  transport: 'streamable-http',
+});
+```
+
+Start each replica with `node mcp-server.js`. Only the MCP endpoint listens, by default at `http://127.0.0.1:3001/mcp`. The runtime imports the app once and passes requests through Node's HTTP parser over in-memory streams. The same mode works with `transport: 'stdio'`.
+
+Ship the generated file, the app module, its runtime dependencies and configuration together. A relative `appModule` resolves from the **generated file**. Point it at compiled JavaScript when deploying TypeScript apps on Node 20. For a named export such as `export const app = express()`, set `appExport: 'app'`. Build the tool list from the same app revision you deploy.
+
+Both modes use the same route filters and tool names. Existing configurations that supply `expressBaseUrl` select proxy mode automatically. See the [deployment and compatibility review](docs/README.md#production-readiness) for caller identity, route contracts, transport limits and shutdown.
+
+For Express 5 routers mounted below a prefix, set `routes` to the full method/path templates, for example `[{ method: 'GET', path: '/api/users/:id' }]`. Generation stops when it encounters an opaque mount without a manifest.
 
 ## Options
 
@@ -64,12 +89,16 @@ Use a non-loopback host only when you intentionally operate a network service, a
 http: {
   host: '127.0.0.1',
   allowedOrigins: ['https://mcp.example.com'],
-  authToken: process.env.MCP_TOKEN,
+  authTokenEnv: 'MCP_TOKEN',
   maxBodySize: 262_144,
 }
 ```
 
-The runtime accepts both the 2026-07-28 `server/discover` flow and legacy `initialize` requests. Modern HTTP requests must supply MCP headers that match the JSON-RPC body.
+Set `MCP_TOKEN` in the generated server’s runtime environment. Startup fails if the configured variable is empty or missing. The older `authToken` option embeds its literal value in the generated file.
+
+For shared deployments, `http.oauth` adds audience-checked JWTs, per-tool scopes and protected-resource metadata. A wildcard bind requires `http.allowedHosts`. Each HTTP replica serves `/readyz`, supports optional metrics and drains on termination. [Deployment configuration](docs/README.md#production-readiness)
+
+The bundled official SDK accepts both the 2026-07-28 `server/discover` flow and legacy `initialize` requests. Modern HTTP requests must supply MCP headers that match the JSON-RPC body.
 
 ## Development
 

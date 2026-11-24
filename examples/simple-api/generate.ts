@@ -8,17 +8,19 @@ const __dirname = path.dirname(__filename);
 
 async function main() {
   try {
+    const proxy = process.argv.includes('--proxy');
+    const outputPath = path.join(__dirname, 'mcp-server.js');
     await generateMcpServer(app, {
-      expressBaseUrl: 'http://localhost:3000',
-      outputPath: path.join(__dirname, 'mcp-server.js'),
+      ...(proxy
+        ? { mode: 'proxy' as const, expressBaseUrl: 'http://localhost:3000' }
+        : { mode: 'import' as const, appModule: './app.js' }),
+      outputPath,
       typescript: false,
       transport: 'stdio',
     });
 
-    console.log('\nMCP server generated successfully!');
-    console.log('\nTo use the MCP server:');
-    console.log('1. Start your Express server: node examples/simple-api/server.js');
-    console.log('2. Run the MCP server: node examples/simple-api/mcp-server.js');
+    if (proxy) console.log('Start the API with node server.js');
+    console.log(`Start the MCP server with node "${outputPath}"`);
   } catch (error: any) {
     console.error('Error generating MCP server:', error.message);
     process.exit(1);
