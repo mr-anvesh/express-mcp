@@ -1,5 +1,5 @@
 import type { Application } from 'express';
-import type { GenerateOptions } from './types.js';
+import type { GenerateOptions, GenerationResult } from './types.js';
 import { extractRoutes } from './extractor.js';
 import { generateMcpServerFile } from './generator.js';
 
@@ -28,29 +28,59 @@ import { generateMcpServerFile } from './generator.js';
  */
 export async function generateMcpServer(
   app: Application,
-  options: GenerateOptions
-): Promise<void> {
+  options: GenerateOptions,
+): Promise<GenerationResult> {
   // Extract routes from Express app
   const routes = extractRoutes(app);
 
   if (routes.length === 0) {
-    throw new Error('No routes found in Express application. Make sure you have defined at least one route.');
+    throw new Error(
+      'No routes found in Express application. Make sure you have defined at least one route.',
+    );
   }
 
-  // Generate MCP server file
-  await generateMcpServerFile(routes, options);
+  const generatedRoutes = filterRoutes(routes, options);
+  if (generatedRoutes.length === 0) {
+    throw new Error('No routes matched the configured include, exclude, and readOnly options.');
+  }
 
-  console.log(`Generated MCP server with ${routes.length} tools at: ${options.outputPath}`);
+  await generateMcpServerFile(generatedRoutes, options);
+  return { outputPath: options.outputPath, toolCount: generatedRoutes.length };
+}
+
+function filterRoutes(routes: import('./types.js').ExpressRoute[], options: GenerateOptions) {
+  const isReadOnly = (method: string) => ['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const matches = (
+    route: import('./types.js').ExpressRoute,
+    patterns: GenerateOptions['include'],
+  ) => {
+    if (!patterns || patterns.length === 0) return false;
+    const values = [route.path, `${route.method} ${route.path}`];
+    return patterns.some((pattern) =>
+      values.some((value) => {
+        if (typeof pattern === 'string') return value.includes(pattern);
+        pattern.lastIndex = 0;
+        return pattern.test(value);
+      }),
+    );
+  };
+
+  return routes.filter(
+    (route) =>
+      (!options.readOnly || isReadOnly(route.method)) &&
+      (!options.include || matches(route, options.include)) &&
+      !matches(route, options.exclude),
+  );
 }
 
 // Re-export types for convenience
 export type {
   GenerateOptions,
+  GenerationResult,
+  HttpTransportOptions,
+  RoutePattern,
   ExpressRoute,
   McpTool,
-  McpRequest,
-  McpResponse,
-  ToolContent,
 } from './types.js';
 
 export { extractRoutes } from './extractor.js';

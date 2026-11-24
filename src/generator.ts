@@ -1,209 +1,162 @@
-import type { ExpressRoute, GenerateOptions, McpTool, GeneratedTool } from './types.js';
-import { mcpProtocolTemplate } from './templates/mcp-protocol.js';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { promises as fs } from 'node:fs';
+import type { ExpressRoute, GenerateOptions, GeneratedTool, McpTool } from './types.js';
+import { createMcpProtocolTemplate } from './templates/mcp-protocol.js';
 
-/**
- * Generate MCP server file from Express routes
- */
+/** Generate a standalone MCP server file from Express routes. */
 export async function generateMcpServerFile(
   routes: ExpressRoute[],
-  options: GenerateOptions
+  options: GenerateOptions,
 ): Promise<void> {
-  const generatedTools = routes.map(route => generateTool(route));
-
-  const fileContent = generateFileContent(generatedTools, options);
-
-  await fs.writeFile(options.outputPath, fileContent, 'utf-8');
+  const tools = routes.map(generateTool);
+  await fs.writeFile(options.outputPath, generateFileContent(tools, options), 'utf8');
 }
 
-/**
- * Convert an Express route to an MCP tool definition
- */
 function generateTool(route: ExpressRoute): GeneratedTool {
   const name = generateToolName(route.method, route.path);
-  const description = generateToolDescription(route);
-  const inputSchema = generateToolSchema(route);
-  const handlerName = `handle_${name}`;
-
   return {
     name,
-    description,
-    inputSchema,
+    description: `${route.method} ${route.path}. Calls the Express endpoint and returns its response.`,
+    inputSchema: generateToolSchema(route),
+    annotations: generateToolAnnotations(route.method),
     route,
-    handlerName,
+    handlerName: `handle_${name}`,
   };
 }
 
-/**
- * Generate a tool name from HTTP method and path
- * Example: GET /users/:id => get_users_by_id
- */
-function generateToolName(method: string, path: string): string {
-  const parts = path.split('/').filter(Boolean);
-
-  const normalizedParts = parts.map(part => {
-    if (part.startsWith(':')) {
-      return 'by_' + part.slice(1);
-    }
-    return part.replace(/[^a-zA-Z0-9]/g, '_');
-  });
-
-  const segments = [method.toLowerCase(), ...normalizedParts];
-  return segments.join('_').replace(/__+/g, '_');
+function generateToolName(method: string, routePath: string): string {
+  const parts = routePath
+    .split('/')
+    .filter(Boolean)
+    .map((part) =>
+      part.startsWith(':') ? `by_${part.slice(1)}` : part.replace(/[^a-zA-Z0-9]/g, '_'),
+    );
+  return [method.toLowerCase(), ...parts].join('_').replace(/__+/g, '_');
 }
 
-/**
- * Generate human-readable description for a tool
- */
-function generateToolDescription(route: ExpressRoute): string {
-  return `${route.method} ${route.path}`;
+function generateToolAnnotations(method: string): NonNullable<McpTool['annotations']> {
+  const upperMethod = method.toUpperCase();
+  return {
+    readOnlyHint: ['GET', 'HEAD', 'OPTIONS'].includes(upperMethod),
+    idempotentHint: ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(upperMethod),
+    destructiveHint: upperMethod === 'DELETE',
+  };
 }
 
-/**
- * Generate JSON Schema for tool input parameters
- */
-function generateToolSchema(route: ExpressRoute): {
-  type: 'object';
-  properties: Record<string, any>;
-  required?: string[];
-} {
-  const properties: Record<string, any> = {};
+function generateToolSchema(route: ExpressRoute): McpTool['inputSchema'] {
+  const properties: Record<string, unknown> = {};
   const required: string[] = [];
 
-  // Path parameters
-  route.params.forEach(param => {
-    properties[param] = {
-      type: 'string',
-      description: `Path parameter: ${param}`,
-    };
+  for (const param of route.params) {
+    properties[param] = { type: 'string', description: `Path parameter: ${param}` };
     required.push(param);
-  });
-
-  // Request body (for POST, PUT, PATCH)
-  if (['POST', 'PUT', 'PATCH'].includes(route.method)) {
-    properties.body = {
-      type: 'object',
-      description: 'Request body',
-    };
   }
 
-  // Query parameters (optional)
+  if (['POST', 'PUT', 'PATCH'].includes(route.method)) {
+    properties.body = { type: 'object', description: 'JSON request body' };
+  }
+
   properties.query = {
     type: 'object',
-    description: 'Query string parameters (optional)',
-    additionalProperties: true,
+    description:
+      'Optional query values. Values must be strings, numbers, booleans, or arrays of those values.',
+    additionalProperties: {
+      oneOf: [
+        { type: 'string' },
+        { type: 'number' },
+        { type: 'boolean' },
+        {
+          type: 'array',
+          items: { oneOf: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }] },
+        },
+      ],
+    },
   };
 
-  return {
-    type: 'object',
-    properties,
-    ...(required.length > 0 && { required }),
-  };
+  return { type: 'object', properties, ...(required.length > 0 ? { required } : {}) };
 }
 
 /**
- * Generate the complete MCP server file content
+ * All data literals are JSON encoded so route names, URLs, and descriptions
+ * cannot change the generated program's syntax.
  */
-function generateFileContent(tools: GeneratedTool[], options: GenerateOptions): string {
-  const { expressBaseUrl, transport = 'stdio', mcpPort, typescript = true } = options;
+export function generateFileContent(tools: GeneratedTool[], options: GenerateOptions): string {
+  const transport = options.transport ?? 'stdio';
+  const httpOptions = options.http ?? {};
+  const typescript = options.typescript ?? true;
+  const toolsLiteral = JSON.stringify(
+    tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      annotations: tool.annotations,
+    })),
+    null,
+    2,
+  );
+  const routeCases = tools.map(generateToolCase).join('\n\n');
 
-  const shebang = '#!/usr/bin/env node';
-
-  // Generate tool definitions
-  const toolDefinitions = tools
-    .map(
-      tool => `  {
-    name: '${tool.name}',
-    description: '${tool.description}',
-    inputSchema: ${JSON.stringify(tool.inputSchema, null, 6).replace(/\n/g, '\n    ')},
-  }`
-    )
-    .join(',\n');
-
-  // Generate tool handlers
-  const toolHandlers = tools
-    .map(tool => {
-      const { route, name } = tool;
-      const hasBody = ['POST', 'PUT', 'PATCH'].includes(route.method);
-
-      let urlConstruction = '';
-      if (route.params.length > 0) {
-        const pathWithParams = route.path.replace(/:([a-zA-Z0-9_]+)/g, '${args.$1}');
-        urlConstruction = `let url = \`\${baseUrl}${pathWithParams}\`;`;
-      } else {
-        urlConstruction = `let url = \`\${baseUrl}${route.path}\`;`;
-      }
-
-      const queryParamCode = `
-      if (args.query && Object.keys(args.query).length > 0) {
-        const queryString = new URLSearchParams(args.query as any).toString();
-        url += (url.includes('?') ? '&' : '?') + queryString;
-      }`;
-
-      const fetchOptions: string[] = [`method: '${route.method}'`];
-
-      if (hasBody) {
-        fetchOptions.push(`headers: { 'Content-Type': 'application/json' }`);
-        fetchOptions.push(`body: JSON.stringify(args.body || {})`);
-      }
-
-      const fetchCall = `fetch(url, {
-        ${fetchOptions.join(',\n        ')}
-      })`;
-
-      return `    case '${name}': {
-      ${urlConstruction}${queryParamCode}
-      const response = await ${fetchCall};
-
-      if (!response.ok) {
-        throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (contentType?.includes('application/json')) {
-        return await response.json();
-      } else {
-        return await response.text();
-      }
-    }`;
-    })
-    .join('\n\n');
-
-  const parts = [
-    shebang,
+  return [
+    '#!/usr/bin/env node',
+    '// Generated by express-mcp-server. Regenerate instead of editing this file.',
     '',
-    mcpProtocolTemplate,
+    createMcpProtocolTemplate(typescript),
     '',
-    '// ===== Tool Definitions =====',
+    `const tools${typescript ? ': McpTool[]' : ''} = ${toolsLiteral};`,
     '',
-    'const tools = [',
-    toolDefinitions,
-    '];',
+    'function addQuery(url, query) {',
+    '  if (!query || typeof query !== "object" || Array.isArray(query)) return url;',
+    '  const search = new URLSearchParams();',
+    '  for (const [key, value] of Object.entries(query)) {',
+    '    const values = Array.isArray(value) ? value : [value];',
+    '    for (const item of values) {',
+    '      if (!["string", "number", "boolean"].includes(typeof item)) {',
+    '        throw new Error(`Query parameter ${key} must be a primitive or an array of primitives`);',
+    '      }',
+    '      search.append(key, String(item));',
+    '    }',
+    '  }',
+    '  const queryString = search.toString();',
+    '  return queryString ? `${url}${url.includes("?") ? "&" : "?"}${queryString}` : url;',
+    '}',
     '',
-    '// ===== Tool Handlers =====',
-    '',
-    'async function callTool(name: string, args: any): Promise<any> {',
-    `  const baseUrl = '${expressBaseUrl}';`,
-    '',
+    'async function callTool(name, args = {}) {',
+    `  const baseUrl = ${JSON.stringify(options.expressBaseUrl)}.replace(/\\/$/, '');`,
     '  switch (name) {',
-    toolHandlers,
-    '',
+    routeCases,
     '    default:',
     '      throw new Error(`Unknown tool: ${name}`);',
     '  }',
     '}',
     '',
-    '// ===== Server Bootstrap =====',
+    'const server = new McpServer("express-mcp-server", "1.0.0", callTool);',
+    'for (const tool of tools) server.registerTool(tool);',
+    `server.start(${JSON.stringify(transport)}, ${JSON.stringify(options.mcpPort ?? 3001)}, ${JSON.stringify(httpOptions)});`,
     '',
-    "(async () => {",
-    "  const server = new McpServer('express-mcp-server', '1.0.0');",
-    '  ',
-    '  tools.forEach(tool => server.registerTool(tool));',
-    '  ',
-    `  await server.start('${transport}'${mcpPort ? `, ${mcpPort}` : ''});`,
-    "})();",
-  ];
+  ].join('\n');
+}
 
-  return parts.join('\n');
+function generateToolCase(tool: GeneratedTool): string {
+  const { route } = tool;
+  const needsBody = ['POST', 'PUT', 'PATCH'].includes(route.method);
+  const requestOptions = needsBody
+    ? `{ method: ${JSON.stringify(route.method)}, headers: { "Content-Type": "application/json" }, body: JSON.stringify(args.body ?? {}) }`
+    : `{ method: ${JSON.stringify(route.method)} }`;
+
+  return [
+    `    case ${JSON.stringify(tool.name)}: {`,
+    `      const pathTemplate = ${JSON.stringify(route.path)};`,
+    '      const requestPath = pathTemplate.replace(/:([A-Za-z0-9_]+)/g, (_match, parameter) => {',
+    '        if (args[parameter] === undefined || args[parameter] === null) {',
+    '          throw new Error(`Missing required path parameter: ${parameter}`);',
+    '        }',
+    '        return encodeURIComponent(String(args[parameter]));',
+    '      });',
+    '      const url = addQuery(`${baseUrl}${requestPath}`, args.query);',
+    `      const response = await fetch(url, ${requestOptions});`,
+    '      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);',
+    '      return response.headers.get("content-type")?.includes("application/json")',
+    '        ? response.json()',
+    '        : response.text();',
+    '    }',
+  ].join('\n');
 }

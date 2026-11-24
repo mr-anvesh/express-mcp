@@ -1,5 +1,3 @@
-import type { Application } from 'express';
-
 /**
  * Represents an extracted Express route
  */
@@ -26,6 +24,33 @@ export interface GenerateOptions {
   typescript?: boolean;
   /** Transport type for MCP server */
   transport?: 'stdio' | 'streamable-http';
+  /** Only generate routes whose `METHOD /path` matches one of these patterns. */
+  include?: RoutePattern[];
+  /** Do not generate routes whose `METHOD /path` matches one of these patterns. */
+  exclude?: RoutePattern[];
+  /** Only expose safe, read-only HTTP methods (GET, HEAD, and OPTIONS). */
+  readOnly?: boolean;
+  /** Settings for the loopback-only Streamable HTTP transport. */
+  http?: HttpTransportOptions;
+}
+
+/** A route pattern is matched against both `/path` and `METHOD /path`. */
+export type RoutePattern = string | RegExp;
+
+export interface HttpTransportOptions {
+  /** Interface to bind. Defaults to `127.0.0.1`; use a non-loopback host deliberately. */
+  host?: string;
+  /** Browser origins allowed to call the HTTP transport. No origins are allowed by default. */
+  allowedOrigins?: string[];
+  /** Reject request bodies larger than this many bytes. Defaults to 1 MiB. */
+  maxBodySize?: number;
+  /** Optional bearer token required by the HTTP transport. */
+  authToken?: string;
+}
+
+export interface GenerationResult {
+  outputPath: string;
+  toolCount: number;
 }
 
 /**
@@ -39,45 +64,19 @@ export interface McpTool {
   /** JSON Schema for tool input parameters */
   inputSchema: {
     type: 'object';
-    properties: Record<string, any>;
+    properties: Record<string, unknown>;
     required?: string[];
+  };
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
   };
 }
 
 /**
  * JSON-RPC 2.0 request message
  */
-export interface McpRequest {
-  jsonrpc: '2.0';
-  method: string;
-  params?: any;
-  id?: number | string;
-}
-
-/**
- * JSON-RPC 2.0 response message
- */
-export interface McpResponse {
-  jsonrpc: '2.0';
-  id: number | string;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-}
-
-/**
- * Tool call result content
- */
-export interface ToolContent {
-  type: 'text' | 'image' | 'resource';
-  text?: string;
-  data?: string;
-  mimeType?: string;
-}
-
 /**
  * Internal representation for code generation
  */

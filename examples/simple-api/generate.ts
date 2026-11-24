@@ -10,15 +10,15 @@ async function main() {
   try {
     await generateMcpServer(app, {
       expressBaseUrl: 'http://localhost:3000',
-      outputPath: path.join(__dirname, 'mcp-server.ts'),
-      typescript: true,
+      outputPath: path.join(__dirname, 'mcp-server.js'),
+      typescript: false,
       transport: 'stdio',
     });
 
     console.log('\nMCP server generated successfully!');
     console.log('\nTo use the MCP server:');
     console.log('1. Start your Express server: node examples/simple-api/server.js');
-    console.log('2. Run the MCP server: node examples/simple-api/mcp-server.ts');
+    console.log('2. Run the MCP server: node examples/simple-api/mcp-server.js');
   } catch (error: any) {
     console.error('Error generating MCP server:', error.message);
     process.exit(1);
